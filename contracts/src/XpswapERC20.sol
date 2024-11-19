@@ -63,11 +63,11 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _update(address from, address to, uint256 value) private returns (bool) {
-        console.log("Update called");
-        console.log("From:", from);
-        console.log("To:", to);
-        console.log("Value:", value);
-        console.log("Balance of sender (from):", balanceOf[from]);
+        // console.log("Update called");
+        // console.log("From:", from);
+        // console.log("To:", to);
+        // console.log("Transfer Value:", value);
+        // console.log("Balance of sender (from):", balanceOf[from]);
 
         if (from == address(0))
             totalSupply += value;
