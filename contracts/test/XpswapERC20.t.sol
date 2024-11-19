@@ -2,35 +2,93 @@
 pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
-import "../src/XpswapPool.sol";
+import "../src/XpswapERC20.sol";
 
-contract nawakERC20 is XpswapERC20 {
-    constructor(string memory name_, string memory ticker_) XpswapERC20() {
-        name = name_;
-        symbol = ticker_;
-        _mint(msg.sender, 10000);
+contract testERC20 is XpswapERC20 {
+    constructor() XpswapERC20() {
+        _mint(msg.sender, 1000);
     }
 }
 
-contract XpswapPoolTest is Test {
-    XpswapPool private xpswapPoolContract;
-    nawakERC20 private tokenA;
-    nawakERC20 private tokenB;
+contract XpswapERC20Test is Test {
+    XpswapERC20 private token;
 
-    // Set up the contract before tests
+    address private alice = address(0x1);
+    address private bob = address(0x2);
+    address private carol = address(0x3);
+
     function setUp() public {
-        tokenA = new nawakERC20("Dai", "DAI");
-        tokenB = new nawakERC20("Starknet", "STRK");
-        xpswapPoolContract = new XpswapPool(address(tokenA), address(tokenB));
+        vm.prank(alice);
+        token = new testERC20();
     }
 
-    function test_balance() public {
-        tokenA.approve(address(xpswapPoolContract), 100);
-        tokenB.approve(address(xpswapPoolContract), 10000);
-        xpswapPoolContract.addLiquidity(100, 10000);
-        assertEq(xpswapPoolContract.balanceOf(address(this)), 200);
-        assertEq(tokenA.balanceOf(address(xpswapPoolContract)), 100);
-        assertEq(tokenB.balanceOf(address(xpswapPoolContract)), 10000);
+    function testInitialSupply() public view {
+        assertEq(token.totalSupply(), 1000, "Initial supply should be 0");
     }
 
+    function testMint() public view {
+        assertEq(token.totalSupply(), 1000, "Total supply mismatch");
+        assertEq(token.balanceOf(alice), 1000, "Balance mismatch for Alice");
+    }
+
+    function testTransfer() public {
+        vm.prank(alice);
+        uint256 transferAmount = 500;
+        token.transfer(bob, transferAmount);
+
+        assertEq(token.balanceOf(alice), 1000 - transferAmount, "Incorrect balance for Alice after transfer");
+        assertEq(token.balanceOf(bob), transferAmount, "Incorrect balance for Bob after transfer");
+    }
+
+    function testApproveAndAllowance() public {
+        vm.prank(alice);
+        uint256 allowanceAmount = 300;
+        token.approve(bob, allowanceAmount);
+
+        assertEq(token.allowance(alice, bob), allowanceAmount, "Allowance mismatch");
+    }
+
+    function testTransferFrom() public {
+        vm.prank(alice);
+        uint256 allowanceAmount = 300;
+        uint256 transferAmount = 200;
+        token.approve(bob, allowanceAmount);
+
+        vm.prank(bob);
+        token.transferFrom(alice, carol, transferAmount);
+
+        assertEq(token.balanceOf(alice), 1000 - transferAmount, "Incorrect balance for Alice after transferFrom");
+        assertEq(token.balanceOf(carol), transferAmount, "Incorrect balance for Carol after transferFrom");
+        assertEq(token.allowance(alice, bob), allowanceAmount - transferAmount, "Allowance not updated correctly");
+    }
+
+    function testTransferFromWithInfiniteAllowance() public {
+        vm.prank(alice);
+        uint256 transferAmount = 500;
+        token.approve(bob, type(uint256).max); // Infinite allowance
+
+        vm.prank(bob);
+        token.transferFrom(alice, carol, transferAmount);
+
+        assertEq(token.balanceOf(alice), 1000 - transferAmount, "Incorrect balance for Alice after transferFrom");
+        assertEq(token.balanceOf(carol), transferAmount, "Incorrect balance for Carol after transferFrom");
+        assertEq(token.allowance(alice, bob), type(uint256).max, "Infinite allowance should not decrement");
+    }
+
+    function testTransferFailsWhenInsufficientBalance() public {
+        vm.expectRevert("Insufficient fond");
+        token.transfer(bob, 2000);
+    }
+
+    function testTransferFromFailsWhenAllowanceIsLow() public {
+        uint256 allowanceAmount = 200;
+        uint256 transferAmount = 300;
+
+        vm.prank(alice);
+        token.approve(bob, allowanceAmount);
+
+        vm.prank(bob);
+        vm.expectRevert("Insufficient allowance");
+        token.transferFrom(alice, carol, transferAmount);
+    }
 }
