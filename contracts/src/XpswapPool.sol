@@ -15,7 +15,7 @@ contract XpswapPool is XpswapERC20 {
     uint public totalDeposit;
     uint public k;
 
-    int256 txFees = 3 * 1e18 / 100;
+    uint8 txFees = 3;
 
     constructor(address tokenA_, address tokenB_) XpswapERC20() {
         tokenA = IERC20(tokenA_);
@@ -60,24 +60,25 @@ contract XpswapPool is XpswapERC20 {
         tokenB.transfer(msg.sender, amountB);
     }
 
-    function swap(uint256 outputAmount, address outputToken) public {
+
+    function swapWithOutput(uint256 outputAmount, address outputToken) public {
         require(outputToken == address(tokenA) || outputToken == address(tokenB), "Invalid token address");
         require(outputAmount > 0, "Invalid output amount");
-
         (IERC20 tokenOut, IERC20 tokenIn, uint256 reserveOut, uint256 reserveIn) = 
             outputToken == address(tokenA)
             ? (tokenA, tokenB, reserveA, reserveB)
             : (tokenB, tokenA, reserveB, reserveA);
-
         require(outputAmount <= reserveOut, "Insufficient liquidity in pool");
-        
-        uint256 inputAmount = (outputAmount * reserveIn) / (reserveOut - outputAmount);
+
+        uint256 numerator = outputAmount * reserveIn * 1000;
+        uint256 denominator = (reserveOut - outputAmount) * (1000 - txFees);
+        uint256 inputAmount = numerator / denominator + 1;
 
         tokenIn.transferFrom(msg.sender, address(this), inputAmount);
-        reserveIn += inputAmount;
-
         tokenOut.transfer(msg.sender, outputAmount);
-        reserveOut -= outputAmount;
+
+        reserveIn += inputAmount;
+        reserveOut -= (outputAmount);
 
         if (outputToken == address(tokenA)) {
             reserveA = reserveOut;

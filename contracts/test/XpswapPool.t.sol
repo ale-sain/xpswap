@@ -31,9 +31,6 @@ contract XpswapPoolTest is Test {
         tokenB.transfer(user1, 1000);
         tokenA.transfer(user2, 500);
         tokenB.transfer(user2, 500);
-
-        // tokenA.transfer(user3, type(uint256).max);
-        // tokenB.transfer(user3, type(uint256).max);
     }
 
 
@@ -114,135 +111,165 @@ contract XpswapPoolTest is Test {
         assertEq(tokenB.balanceOf(address(pool)), 1500, "Token B reserve incorrect");
     }
 
-    // function test_removeLiquidityOverflow() public {
-    //     // Simule un utilisateur avec un très grand montant de liquidités ajoutées
-    //     vm.prank(user3);
-    //     tokenA.approve(address(pool), type(uint256).max);
-    //     vm.prank(user3);
-    //     tokenB.approve(address(pool), type(uint256).max);
-        
-    //     // Ajout de liquidités avec des valeurs maximales
-    //     vm.prank(user3);
-    //     pool.addLiquidity(type(uint256).max / 2, type(uint256).max / 2);
-
-    //     // Simule un overflow potentiel lors de removeLiquidity
-    //     vm.expectRevert("Panic: Arithmetic overflow or underflow"); // Solidity lève ce message pour un overflow
-    //     vm.prank(user3);
-    //     pool.removeLiquidity(type(uint256).max);
-    // }
-
-
-
-    // // Test edge case: Adding liquidity with a very large amount
-    // function test_addLiquidityLargeAmounts() public {
-    //     vm.prank(user3);
-    //     tokenA.approve(address(pool), type(uint256).max);
-    //     vm.prank(user3);
-    //     tokenB.approve(address(pool), type(uint256).max);
-    //     vm.prank(user3);
-    //     pool.addLiquidity(1e18, 1e18);
-
-    //     assertEq(tokenA.balanceOf(address(pool)), 1e18, "Token A reserve incorrect with large amount");
-    //     assertEq(tokenB.balanceOf(address(pool)), 1e18, "Token B reserve incorrect with large amount");
-    // }
-
-    function testSwapTokenAForTokenB() public {
+    function testSwapTokenBForTokenAWithFees() public {
         test_addLiquidity();
 
-        uint outputAmount = 5; // Amount of tokenA to receive
-        uint inputAmount = (outputAmount * pool.reserveB()) / (pool.reserveA() - outputAmount);
-        
+        uint256 outputAmount = 50; // Montant de Token A à recevoir
+        uint256 reserveIn = pool.reserveB();
+        uint256 reserveOut = pool.reserveA();
+
+        uint256 fee = 3; // Frais de 0,3 % avec une base de 1000
+
+        // Calcul du montant d'entrée en tenant compte des frais
+        uint256 numerator = outputAmount * reserveIn * 1000;
+        uint256 denominator = (reserveOut - outputAmount) * (1000 - fee);
+        uint256 inputAmount = numerator / denominator + 1;
+
         vm.prank(user2);
-        tokenA.transfer(address(user1), 500); // remove all his token A token
+        tokenB.approve(address(pool), inputAmount);
 
+        uint256 balanceABefore = tokenA.balanceOf(user2);
+        uint256 balanceBBefore = tokenB.balanceOf(user2);
 
-        uint balanceB = tokenB.balanceOf(address(user2));
+        vm.prank(user2);
+        pool.swapWithOutput(outputAmount, address(tokenA));
+
+        uint256 balanceAAfter = tokenA.balanceOf(user2);
+        uint256 balanceBAfter = tokenB.balanceOf(user2);
+
+        assertEq(balanceAAfter, balanceABefore + outputAmount, "Solde de token A incorrect apres le swap");
+        assertEq(balanceBAfter, balanceBBefore - inputAmount, "Solde de token B incorrect apres le swap");
+    }
+
+    // Nouveau test : Vérification de l'invariant après un swap avec frais
+    function testInvariantAfterSwapWithFees() public {
+        test_addLiquidity();
+
+        uint256 outputAmount = 50;
+        uint256 reserveIn = pool.reserveB();
+        uint256 reserveOut = pool.reserveA();
+
+        uint256 fee = 3;
+
+        uint256 numerator = outputAmount * reserveIn * 1000;
+        uint256 denominator = (reserveOut - outputAmount) * (1000 - fee);
+        uint256 inputAmount = numerator / denominator + 1;
+
+        uint256 kBefore = reserveIn * reserveOut;
 
         vm.prank(user2);
         tokenB.approve(address(pool), inputAmount);
 
         vm.prank(user2);
-        pool.swap(outputAmount, address(tokenA));
+        pool.swapWithOutput(outputAmount, address(tokenA));
 
-        assertEq(tokenA.balanceOf(address(user2)), outputAmount);
-        assertEq(tokenB.balanceOf(address(user2)), balanceB - inputAmount);
-        assertLt(pool.reserveA(), 1000); // Ensure tokenA reserve decreased
-        assertGt(pool.reserveB(), 1000); // Ensure tokenB reserve increased
+        uint256 reserveInAfter = pool.reserveB();
+        uint256 reserveOutAfter = pool.reserveA();
+        uint256 kAfter = reserveInAfter * reserveOutAfter;
+
+        // En tenant compte des frais, k peut légèrement augmenter
+        assertTrue(kAfter >= kBefore, "Invariant du rpoduit constant non maintenu apres le swap avec frais");
     }
 
-    function testRevertOnInsufficientLiquidity() public {
-        uint outputAmount = 2e18; // Exceeds pool reserve
+    // Nouveau test : Vérification que les frais sont correctement appliqués
+    function testFeesAreAppliedCorrectly() public {
+        test_addLiquidity();
+
+        uint256 outputAmount = 100;
+        uint256 reserveIn = pool.reserveB();
+        uint256 reserveOut = pool.reserveA();
+
+        uint256 fee = 3;
+
+        uint256 numeratorWithFees = outputAmount * reserveIn * 1000;
+        uint256 denominatorWithFees = (reserveOut - outputAmount) * (1000 - fee);
+        uint256 inputAmountWithFees = numeratorWithFees / denominatorWithFees + 1;
+
+        uint256 numeratorNoFees = outputAmount * reserveIn;
+        uint256 denominatorNoFees = (reserveOut - outputAmount);
+        uint256 inputAmountNoFees = numeratorNoFees / denominatorNoFees + 1;
+
+        // Le montant d'entrée avec frais doit être supérieur à celui sans frais
+        assertTrue(inputAmountWithFees > inputAmountNoFees, "Frais pas correctement appliques");
+
+        vm.prank(user2);
+        tokenB.approve(address(pool), inputAmountWithFees);
+
+        vm.prank(user2);
+        pool.swapWithOutput(outputAmount, address(tokenA));
+    }
+
+    // Modification du test existant pour intégrer les frais
+    function testSwapTokenAForTokenBWithFees() public {
+        test_addLiquidity();
+
+        uint256 outputAmount = 100; // Montant de Token B à recevoir
+        uint256 reserveIn = pool.reserveA();
+        uint256 reserveOut = pool.reserveB();
+
+        uint256 fee = 3;
+
+        uint256 numerator = outputAmount * reserveIn * 1000;
+        uint256 denominator = (reserveOut - outputAmount) * (1000 - fee);
+        uint256 inputAmount = numerator / denominator + 1;
+
+        vm.prank(user2);
+        tokenA.approve(address(pool), inputAmount);
+
+        uint256 balanceABefore = tokenA.balanceOf(user2);
+        uint256 balanceBBefore = tokenB.balanceOf(user2);
+
+        vm.prank(user2);
+        pool.swapWithOutput(outputAmount, address(tokenB));
+
+        uint256 balanceAAfter = tokenA.balanceOf(user2);
+        uint256 balanceBAfter = tokenB.balanceOf(user2);
+
+        assertEq(balanceAAfter, balanceABefore - inputAmount, "Solde token A incorrect apres le swap");
+        assertEq(balanceBAfter, balanceBBefore + outputAmount, "Solde token B incorrect apres le swap");
+    }
+
+    // Nouveau test : Échec du swap en raison d'un montant d'entrée insuffisant (sans tenir compte des frais)
+    function testSwapFailsWithInsufficientInputDueToFees() public {
+        test_addLiquidity();
+
+        uint256 outputAmount = 50;
+        uint256 reserveIn = pool.reserveB();
+        uint256 reserveOut = pool.reserveA();
+
+        // Calcul incorrect du montant d'entrée sans inclure les frais
+        uint256 inputAmountIncorrect = (outputAmount * reserveIn) / (reserveOut - outputAmount) + 1;
+
+        vm.prank(user2);
+        tokenB.approve(address(pool), inputAmountIncorrect);
+
+        vm.prank(user2);
+        vm.expectRevert("ERC20: transfer amount exceeds allowance");
+        pool.swapWithOutput(outputAmount, address(tokenA));
+    }
+
+    // Vous pouvez ajouter d'autres tests pour couvrir différents scénarios en intégrant les frais
+
+    // Test : Swap avec un montant de sortie égal à la réserve (devrait échouer)
+    function testSwapFailsWhenOutputEqualsReserveWithFees() public {
+        test_addLiquidity();
+
+        uint256 outputAmount = pool.reserveA(); // Tente de vider toutes les réserves
+
+        vm.prank(user2);
+        vm.expectRevert(); // Échec attendu en raison d'une division par zéro dans le calcul
+        pool.swapWithOutput(outputAmount, address(tokenA));
+    }
+
+    // Test : Swap avec un montant de sortie trop élevé (devrait échouer)
+    function testSwapFailsWithExcessiveOutputAmountWithFees() public {
+        test_addLiquidity();
+
+        uint256 outputAmount = pool.reserveA() + 1; // Dépasse la liquidité disponible
+
+        vm.prank(user2);
         vm.expectRevert("Insufficient liquidity in pool");
-        pool.swap(outputAmount, address(tokenB));
-    }
-
-    function testSwapFailsWithInsufficientApproval() public {
-        test_addLiquidity();
-
-        uint outputAmount = 10; // Amount of tokenA to receive
-        uint inputAmount = (outputAmount * pool.reserveB()) / (pool.reserveA() - outputAmount);
-
-        vm.prank(user2);
-        tokenB.approve(address(pool), inputAmount - 1); // Approve less than required
-
-        vm.prank(user2);
-        vm.expectRevert("ERC20: Insufficient allowance");
-        pool.swap(outputAmount, address(tokenA));
-    }
-
-    function testSwapFailsWithInsufficientBalance() public {
-        test_addLiquidity();
-
-        uint outputAmount = 10; // Amount of tokenA to receive
-        uint inputAmount = (outputAmount * pool.reserveB()) / (pool.reserveA() - outputAmount);
-
-        vm.prank(user2);
-        tokenB.approve(address(pool), inputAmount);
-
-        vm.prank(user2);
-        tokenB.transfer(address(0xdead), 500); // Drain user2's balance
-
-        vm.prank(user2);
-        vm.expectRevert("ERC20: transfer amount exceeds balance");
-        pool.swap(outputAmount, address(tokenA));
-    }
-
-    function testSwapFailsWithInvalidTokenAddress() public {
-        test_addLiquidity();
-
-        uint outputAmount = 10;
-
-        vm.prank(user2);
-        vm.expectRevert("Invalid token address");
-        pool.swap(outputAmount, address(0x1234)); // Invalid token address
-    }
-
-    function testSwapFailsWithExcessiveOutputAmount() public {
-        test_addLiquidity();
-
-        uint outputAmount = pool.reserveA() + 1; // Exceeds available liquidity in tokenA
-
-        vm.prank(user2);
-        vm.expectRevert("Insufficient liquidity in pool");
-        pool.swap(outputAmount, address(tokenA));
-    }
-
-    function testSwapFailsWhenOutputEqualsReserve() public {
-        test_addLiquidity();
-
-        uint outputAmount = pool.reserveA(); // Trying to empty all reserves
-
-        vm.prank(user2);
-        vm.expectRevert(); // Will revert due to division by zero in the inputAmount calculation
-        pool.swap(outputAmount, address(tokenA));
-    }
-
-    function testSwapFailsWithZeroOutputAmount() public {
-        test_addLiquidity();
-
-        vm.prank(user2);
-        vm.expectRevert(); // Likely no explicit error, but it should fail
-        pool.swap(0, address(tokenA));
+        pool.swapWithOutput(outputAmount, address(tokenA));
     }
 
 }

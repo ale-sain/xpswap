@@ -76,7 +76,7 @@ contract XpswapERC20Test is Test {
     }
 
     function testTransferFailsWhenInsufficientBalance() public {
-        vm.expectRevert("Insufficient fond");
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
         token.transfer(bob, 2000);
     }
 
@@ -88,7 +88,7 @@ contract XpswapERC20Test is Test {
         token.approve(bob, allowanceAmount);
 
         vm.prank(bob);
-        vm.expectRevert("Insufficient allowance");
+        vm.expectRevert("ERC20: Insufficient allowance");
         token.transferFrom(alice, carol, transferAmount);
     }
 }
