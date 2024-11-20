@@ -63,16 +63,16 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _update(address from, address to, uint256 value) private returns (bool) {
-        // console.log("Update called");
-        // console.log("From:", from);
-        // console.log("To:", to);
-        // console.log("Transfer Value:", value);
-        // console.log("Balance of sender (from):", balanceOf[from]);
+        console.log("Update called");
+        console.log("From:", from);
+        console.log("To:", to);
+        console.log("Transfer Value:", value);
+        console.log("Balance of sender (from):", balanceOf[from]);
 
         if (from == address(0))
             totalSupply += value;
         else {
-            require(balanceOf[from] >= value, "Insufficient fond");
+            require(balanceOf[from] >= value, "ERC20: transfer amount exceeds balance");
             balanceOf[from] -= value;
         }
         if (to == address(0))
@@ -88,7 +88,7 @@ contract XpswapERC20 is IERC20 {
     function _spendAllowance(address owner, address spender, uint256 value) private {
         uint256 currentAllowance = allowance[owner][spender];
         if (currentAllowance < type(uint256).max) {
-            require(allowance[owner][msg.sender] >= value, "Insufficient allowance");
+            require(allowance[owner][msg.sender] >= value, "ERC20: Insufficient allowance");
             unchecked {
                 _approve(owner, spender, currentAllowance - value, false);
             }

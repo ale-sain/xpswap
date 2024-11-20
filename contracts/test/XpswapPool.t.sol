@@ -13,7 +13,7 @@ contract nawakERC20 is XpswapERC20 {
 }
 
 contract XpswapPoolTest is Test {
-    XpswapPool private xpswapPoolContract;
+    XpswapPool private pool;
     nawakERC20 private tokenA;
     nawakERC20 private tokenB;
 
@@ -24,7 +24,7 @@ contract XpswapPoolTest is Test {
     function setUp() public {
         tokenA = new nawakERC20("Dai", "DAI");
         tokenB = new nawakERC20("Starknet", "STRK");
-        xpswapPoolContract = new XpswapPool(address(tokenA), address(tokenB));
+        pool = new XpswapPool(address(tokenA), address(tokenB));
 
         // Distribute initial tokens to user1 and user2
         tokenA.transfer(user1, 1000);
@@ -39,26 +39,26 @@ contract XpswapPoolTest is Test {
 
     function test_addLiquidity() public {
         vm.prank(user1);
-        tokenA.approve(address(xpswapPoolContract), 100);
+        tokenA.approve(address(pool), 100);
         vm.prank(user1);
-        tokenB.approve(address(xpswapPoolContract), 1000);
+        tokenB.approve(address(pool), 1000);
         vm.prank(user1);
-        xpswapPoolContract.addLiquidity(100, 1000);
+        pool.addLiquidity(100, 1000);
 
-        assertEq(xpswapPoolContract.balanceOf(user1), 200, "LP token balance incorrect");
-        assertEq(tokenA.balanceOf(address(xpswapPoolContract)), 100, "Token A reserve incorrect");
-        assertEq(tokenB.balanceOf(address(xpswapPoolContract)), 1000, "Token B reserve incorrect");
+        assertEq(pool.balanceOf(user1), 200, "LP token balance incorrect");
+        assertEq(tokenA.balanceOf(address(pool)), 100, "Token A reserve incorrect");
+        assertEq(tokenB.balanceOf(address(pool)), 1000, "Token B reserve incorrect");
     }
 
     function test_removeLiquidity() public {
         test_addLiquidity();
 
         vm.prank(user1);
-        xpswapPoolContract.removeLiquidity(100);
+        pool.removeLiquidity(100);
 
-        assertEq(xpswapPoolContract.balanceOf(user1), 100, "Remaining LP token balance incorrect");
-        assertEq(tokenA.balanceOf(address(xpswapPoolContract)), 50, "Token A reserve incorrect after removal");
-        assertEq(tokenB.balanceOf(address(xpswapPoolContract)), 500, "Token B reserve incorrect after removal");
+        assertEq(pool.balanceOf(user1), 100, "Remaining LP token balance incorrect");
+        assertEq(tokenA.balanceOf(address(pool)), 50, "Token A reserve incorrect after removal");
+        assertEq(tokenB.balanceOf(address(pool)), 500, "Token B reserve incorrect after removal");
         assertEq(tokenA.balanceOf(user1), 950, "User1 Token A balance incorrect after removal");
         assertEq(tokenB.balanceOf(user1), 500, "User1 Token B balance incorrect after removal");
     }
@@ -66,13 +66,13 @@ contract XpswapPoolTest is Test {
 
     function test_addLiquidityFailsWithZeroAmounts() public {
         vm.prank(user1);
-        tokenA.approve(address(xpswapPoolContract), 0);
+        tokenA.approve(address(pool), 0);
         vm.prank(user1);
-        tokenB.approve(address(xpswapPoolContract), 1000);
+        tokenB.approve(address(pool), 1000);
 
         vm.prank(user1);
         vm.expectRevert("Invalid amount for token A");
-        xpswapPoolContract.addLiquidity(0, 1000);
+        pool.addLiquidity(0, 1000);
     }
 
 
@@ -81,7 +81,7 @@ contract XpswapPoolTest is Test {
 
         vm.prank(user1);
         vm.expectRevert("Insufficient deposit");
-        xpswapPoolContract.removeLiquidity(0);
+        pool.removeLiquidity(0);
     }
 
 
@@ -90,45 +90,45 @@ contract XpswapPoolTest is Test {
 
         vm.prank(user1);
         vm.expectRevert("Invalid deposit amount");
-        xpswapPoolContract.removeLiquidity(300); // Exceeds LP balance
+        pool.removeLiquidity(300); // Exceeds LP balance
     }
 
     function test_multipleUsersAddLiquidity() public {
         vm.prank(user1);
-        tokenA.approve(address(xpswapPoolContract), 100);
+        tokenA.approve(address(pool), 100);
         vm.prank(user1);
-        tokenB.approve(address(xpswapPoolContract), 1000);
+        tokenB.approve(address(pool), 1000);
         vm.prank(user1);
-        xpswapPoolContract.addLiquidity(100, 1000);
+        pool.addLiquidity(100, 1000);
 
         vm.prank(user2);
-        tokenA.approve(address(xpswapPoolContract), 50);
+        tokenA.approve(address(pool), 50);
         vm.prank(user2);
-        tokenB.approve(address(xpswapPoolContract), 500);
+        tokenB.approve(address(pool), 500);
         vm.prank(user2);
-        xpswapPoolContract.addLiquidity(50, 500);
+        pool.addLiquidity(50, 500);
 
-        assertEq(xpswapPoolContract.balanceOf(user1), 200, "User1 LP token balance incorrect");
-        assertEq(xpswapPoolContract.balanceOf(user2), 100, "User2 LP token balance incorrect");
-        assertEq(tokenA.balanceOf(address(xpswapPoolContract)), 150, "Token A reserve incorrect");
-        assertEq(tokenB.balanceOf(address(xpswapPoolContract)), 1500, "Token B reserve incorrect");
+        assertEq(pool.balanceOf(user1), 200, "User1 LP token balance incorrect");
+        assertEq(pool.balanceOf(user2), 100, "User2 LP token balance incorrect");
+        assertEq(tokenA.balanceOf(address(pool)), 150, "Token A reserve incorrect");
+        assertEq(tokenB.balanceOf(address(pool)), 1500, "Token B reserve incorrect");
     }
 
     // function test_removeLiquidityOverflow() public {
     //     // Simule un utilisateur avec un très grand montant de liquidités ajoutées
     //     vm.prank(user3);
-    //     tokenA.approve(address(xpswapPoolContract), type(uint256).max);
+    //     tokenA.approve(address(pool), type(uint256).max);
     //     vm.prank(user3);
-    //     tokenB.approve(address(xpswapPoolContract), type(uint256).max);
+    //     tokenB.approve(address(pool), type(uint256).max);
         
     //     // Ajout de liquidités avec des valeurs maximales
     //     vm.prank(user3);
-    //     xpswapPoolContract.addLiquidity(type(uint256).max / 2, type(uint256).max / 2);
+    //     pool.addLiquidity(type(uint256).max / 2, type(uint256).max / 2);
 
     //     // Simule un overflow potentiel lors de removeLiquidity
     //     vm.expectRevert("Panic: Arithmetic overflow or underflow"); // Solidity lève ce message pour un overflow
     //     vm.prank(user3);
-    //     xpswapPoolContract.removeLiquidity(type(uint256).max);
+    //     pool.removeLiquidity(type(uint256).max);
     // }
 
 
@@ -136,13 +136,113 @@ contract XpswapPoolTest is Test {
     // // Test edge case: Adding liquidity with a very large amount
     // function test_addLiquidityLargeAmounts() public {
     //     vm.prank(user3);
-    //     tokenA.approve(address(xpswapPoolContract), type(uint256).max);
+    //     tokenA.approve(address(pool), type(uint256).max);
     //     vm.prank(user3);
-    //     tokenB.approve(address(xpswapPoolContract), type(uint256).max);
+    //     tokenB.approve(address(pool), type(uint256).max);
     //     vm.prank(user3);
-    //     xpswapPoolContract.addLiquidity(1e18, 1e18);
+    //     pool.addLiquidity(1e18, 1e18);
 
-    //     assertEq(tokenA.balanceOf(address(xpswapPoolContract)), 1e18, "Token A reserve incorrect with large amount");
-    //     assertEq(tokenB.balanceOf(address(xpswapPoolContract)), 1e18, "Token B reserve incorrect with large amount");
+    //     assertEq(tokenA.balanceOf(address(pool)), 1e18, "Token A reserve incorrect with large amount");
+    //     assertEq(tokenB.balanceOf(address(pool)), 1e18, "Token B reserve incorrect with large amount");
     // }
+
+    function testSwapTokenAForTokenB() public {
+        test_addLiquidity();
+
+        uint outputAmount = 5; // Amount of tokenA to receive
+        uint inputAmount = (outputAmount * pool.reserveB()) / (pool.reserveA() - outputAmount);
+        
+        vm.prank(user2);
+        tokenA.transfer(address(user1), 500); // remove all his token A token
+
+
+        uint balanceB = tokenB.balanceOf(address(user2));
+
+        vm.prank(user2);
+        tokenB.approve(address(pool), inputAmount);
+
+        vm.prank(user2);
+        pool.swap(outputAmount, address(tokenA));
+
+        assertEq(tokenA.balanceOf(address(user2)), outputAmount);
+        assertEq(tokenB.balanceOf(address(user2)), balanceB - inputAmount);
+        assertLt(pool.reserveA(), 1000); // Ensure tokenA reserve decreased
+        assertGt(pool.reserveB(), 1000); // Ensure tokenB reserve increased
+    }
+
+    function testRevertOnInsufficientLiquidity() public {
+        uint outputAmount = 2e18; // Exceeds pool reserve
+        vm.expectRevert("Insufficient liquidity in pool");
+        pool.swap(outputAmount, address(tokenB));
+    }
+
+    function testSwapFailsWithInsufficientApproval() public {
+        test_addLiquidity();
+
+        uint outputAmount = 10; // Amount of tokenA to receive
+        uint inputAmount = (outputAmount * pool.reserveB()) / (pool.reserveA() - outputAmount);
+
+        vm.prank(user2);
+        tokenB.approve(address(pool), inputAmount - 1); // Approve less than required
+
+        vm.prank(user2);
+        vm.expectRevert("ERC20: Insufficient allowance");
+        pool.swap(outputAmount, address(tokenA));
+    }
+
+    function testSwapFailsWithInsufficientBalance() public {
+        test_addLiquidity();
+
+        uint outputAmount = 10; // Amount of tokenA to receive
+        uint inputAmount = (outputAmount * pool.reserveB()) / (pool.reserveA() - outputAmount);
+
+        vm.prank(user2);
+        tokenB.approve(address(pool), inputAmount);
+
+        vm.prank(user2);
+        tokenB.transfer(address(0xdead), 500); // Drain user2's balance
+
+        vm.prank(user2);
+        vm.expectRevert("ERC20: transfer amount exceeds balance");
+        pool.swap(outputAmount, address(tokenA));
+    }
+
+    function testSwapFailsWithInvalidTokenAddress() public {
+        test_addLiquidity();
+
+        uint outputAmount = 10;
+
+        vm.prank(user2);
+        vm.expectRevert("Invalid token address");
+        pool.swap(outputAmount, address(0x1234)); // Invalid token address
+    }
+
+    function testSwapFailsWithExcessiveOutputAmount() public {
+        test_addLiquidity();
+
+        uint outputAmount = pool.reserveA() + 1; // Exceeds available liquidity in tokenA
+
+        vm.prank(user2);
+        vm.expectRevert("Insufficient liquidity in pool");
+        pool.swap(outputAmount, address(tokenA));
+    }
+
+    function testSwapFailsWhenOutputEqualsReserve() public {
+        test_addLiquidity();
+
+        uint outputAmount = pool.reserveA(); // Trying to empty all reserves
+
+        vm.prank(user2);
+        vm.expectRevert(); // Will revert due to division by zero in the inputAmount calculation
+        pool.swap(outputAmount, address(tokenA));
+    }
+
+    function testSwapFailsWithZeroOutputAmount() public {
+        test_addLiquidity();
+
+        vm.prank(user2);
+        vm.expectRevert(); // Likely no explicit error, but it should fail
+        pool.swap(0, address(tokenA));
+    }
+
 }
