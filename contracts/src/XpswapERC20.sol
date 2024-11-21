@@ -88,7 +88,7 @@ contract XpswapERC20 is IERC20 {
     function _spendAllowance(address owner, address spender, uint256 value) private {
         uint256 currentAllowance = allowance[owner][spender];
         if (currentAllowance < type(uint256).max) {
-            require(allowance[owner][msg.sender] >= value, "ERC20: Insufficient allowance");
+            require(allowance[owner][msg.sender] >= value, "ERC20: transfer amount exceeds allowance");
             unchecked {
                 _approve(owner, spender, currentAllowance - value, false);
             }

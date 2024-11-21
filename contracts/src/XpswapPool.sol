@@ -12,8 +12,7 @@ contract XpswapPool is XpswapERC20 {
 
     uint public reserveA;
     uint public reserveB;
-    uint public totalDeposit;
-    uint public k;
+    uint public liquidity;
 
     uint8 txFees = 3;
 
@@ -23,25 +22,29 @@ contract XpswapPool is XpswapERC20 {
     }
 
     function addLiquidity(uint amountA, uint amountB) public {
-        require(amountA > 0, "Invalid amount for token A");
-        require(amountB > 0, "Invalid amount for token B");
+        console.log("<<<<<<<< ADD LIQUIDITY >>>>>>>>>>");
+        require(amountA > 0, "Pool: Invalid amount for token A");
+        require(amountB > 0, "Pool: Invalid amount for token B");
 
         tokenA.transferFrom(msg.sender, address(this), amountA);
         tokenB.transferFrom(msg.sender, address(this), amountB);
         
-        uint256 userDeposit = amountA * 2;
+        uint16 liquidityMinimum = 0;
+        if (liquidity == 0)
+            liquidityMinimum = 1000;
 
+        uint256 userLiquidity = amountA * amountB;
         reserveA += amountA;
         reserveB += amountB;
-        totalDeposit += userDeposit;
-        k = reserveA * reserveB;
+        liquidity += userLiquidity;
 
-        _mint(msg.sender, userDeposit);
+        _mint(msg.sender, userLiquidity - liquidityMinimum);
+        console.log("<<<<<<<<<<<< END ADD LIQUIDITY >>>>>>>>>>>");
     }
 
     function removeLiquidity(uint userDeposit) public {
-        require(userDeposit > 0, "Insufficient deposit");
-        require(userDeposit <= totalDeposit, "Invalid deposit amount");
+        require(userDeposit > 0, "Pool: Insufficient deposit");
+        require(userDeposit <= totalDeposit, "Pool: Invalid deposit amount");
 
         _burn(msg.sender, userDeposit);
 
@@ -62,17 +65,20 @@ contract XpswapPool is XpswapERC20 {
 
 
     function swapWithOutput(uint256 outputAmount, address outputToken) public {
-        require(outputToken == address(tokenA) || outputToken == address(tokenB), "Invalid token address");
-        require(outputAmount > 0, "Invalid output amount");
+        console.log("<<<<<<<<<<<< SWAP >>>>>>>>>>>>>");
+        require(outputToken == address(tokenA) || outputToken == address(tokenB), "Pool: Invalid token address");
+        require(outputAmount > 0, "Pool: Invalid output amount");
         (IERC20 tokenOut, IERC20 tokenIn, uint256 reserveOut, uint256 reserveIn) = 
             outputToken == address(tokenA)
             ? (tokenA, tokenB, reserveA, reserveB)
             : (tokenB, tokenA, reserveB, reserveA);
-        require(outputAmount <= reserveOut, "Insufficient liquidity in pool");
+        
+        require(outputAmount < reserveOut, "Pool: Insufficient liquidity in pool");
 
         uint256 numerator = outputAmount * reserveIn * 1000;
         uint256 denominator = (reserveOut - outputAmount) * (1000 - txFees);
-        uint256 inputAmount = numerator / denominator + 1;
+        uint256 inputAmount = numerator / denominator;
+        console.log("inputamount->>>> ", inputAmount);
 
         tokenIn.transferFrom(msg.sender, address(this), inputAmount);
         tokenOut.transfer(msg.sender, outputAmount);
@@ -87,6 +93,42 @@ contract XpswapPool is XpswapERC20 {
             reserveA = reserveIn;
             reserveB = reserveOut;
         }
+        console.log("<<<<<<<<<< END SWAP >>>>>>>>>>>>");
+    }
+
+    function swapWithInput(uint256 inputAmount, address inputToken) public {
+        console.log("<<<<<<<<<<<< SWAP >>>>>>>>>>>>>");
+        require(inputToken == address(tokenA) || inputToken == address(tokenB), "Pool: Invalid token address");
+        require(inputAmount > 0, "Pool: Invalid input amount");
+        (IERC20 tokenIn, IERC20 tokenOut, uint256 reserveIn, uint256 reserveOut) = 
+            inputToken == address(tokenA)
+            ? (tokenA, tokenB, reserveA, reserveB)
+            : (tokenB, tokenA, reserveB, reserveA);
+        
+        uint256 effectiveInputAmount = inputAmount * 997 / 1000;
+        require(effectiveInputAmount > 0, "Pool: Input too small after fees");
+
+        uint256 numerator = effectiveInputAmount * reserveOut;
+        uint256 denominator = reserveIn + effectiveInputAmount;
+        uint256 outputAmount = numerator / denominator;
+
+        console.log(outputAmount);
+        require(outputAmount < reserveOut, "Pool: Insufficient liquidity in pool");
+
+        tokenIn.transferFrom(msg.sender, address(this), inputAmount);
+        tokenOut.transfer(msg.sender, outputAmount);
+
+        reserveIn += inputAmount;
+        reserveOut -= (outputAmount);
+
+        if (inputToken == address(tokenA)) {
+            reserveA = reserveIn;
+            reserveB = reserveOut;
+        } else {
+            reserveA = reserveOut;
+            reserveB = reserveIn;
+        }
+        console.log("<<<<<<<<<< END SWAP >>>>>>>>>>>>");
     }
 
 }
