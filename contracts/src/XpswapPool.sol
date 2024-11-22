@@ -12,7 +12,6 @@ contract XpswapPool is XpswapERC20 {
 
     uint public reserveA;
     uint public reserveB;
-    uint public liquidity;
 
     uint8 txFees = 3;
 
@@ -23,41 +22,60 @@ contract XpswapPool is XpswapERC20 {
 
     function addLiquidity(uint amountA, uint amountB) public {
         console.log("<<<<<<<< ADD LIQUIDITY >>>>>>>>>>");
+
         require(amountA > 0, "Pool: Invalid amount for token A");
         require(amountB > 0, "Pool: Invalid amount for token B");
 
         tokenA.transferFrom(msg.sender, address(this), amountA);
         tokenB.transferFrom(msg.sender, address(this), amountB);
         
-        uint16 liquidityMinimum = 0;
-        if (liquidity == 0)
+        uint256 liquidityIn;
+        uint256 liquidity = totalSupply();
+        uint256 liquidityMinimum = 0;
+        uint256 effectiveAmountA = amountA;
+        uint256 effectiveAmountB = amountB;
+        
+        if (liquidity == 0) {
             liquidityMinimum = 1000;
+            liquidityIn = sqrt(amountA * amountB);
+            _mint(address(0), liquidityMinimum);
+        }
+        else {
+            uint256 ratioA = amountA * liquidity / reserveA;
+            uint256 ratioB = amountB * liquidity / reserveB;
+            liquidityIn = min(ratioA, ratioB);
+            if (ratioB < ratioA) {
+                effectiveAmountA = amountB * reserveA / reserveB;
+                tokenA.transfer(msg.sender, amountA - effectiveAmountA);
+            } else {
+                effectiveAmountB = amountA * reserveB / reserveA;
+                tokenB.transfer(msg.sender, amountB - effectiveAmountB);
+            }
+        }
+        reserveA += effectiveAmountA;
+        reserveB += effectiveAmountB;
 
-        uint256 userLiquidity = amountA * amountB;
-        reserveA += amountA;
-        reserveB += amountB;
-        liquidity += userLiquidity;
+        _mint(msg.sender, liquidityIn - liquidityMinimum);
 
-        _mint(msg.sender, userLiquidity - liquidityMinimum);
         console.log("<<<<<<<<<<<< END ADD LIQUIDITY >>>>>>>>>>>");
     }
 
-    function removeLiquidity(uint userDeposit) public {
-        require(userDeposit > 0, "Pool: Insufficient deposit");
-        require(userDeposit <= totalDeposit, "Pool: Invalid deposit amount");
+    function removeLiquidity(uint liquidityOut) public {
+        uint256 liquidity = totalSupply();
 
-        _burn(msg.sender, userDeposit);
+        require(liquidityOut > 0, "Pool: Invalid amount for token LP");
+        require(liquidityOut <= liquidity, "Pool: Invalid liquidity amount");
 
-        uint256 userShare = (userDeposit * 1e18) / totalDeposit;
+        _burn(msg.sender, liquidityOut);
 
-        uint256 amountA = (reserveA * userShare) / 1e18;
-        uint256 amountB = (reserveB * userShare) / 1e18;
-        console.log("userShare = ", userShare);
+        uint256 amountA = (reserveA * liquidityOut) / liquidity;
+        uint256 amountB = (reserveB * liquidityOut) / liquidity;
+
+        require(amountA < reserveA, "Pool: Insufficient liquidity in pool");
+        require(amountB < reserveB, "Pool: Insufficient liquidity in pool");
 
         reserveA -= amountA;
         reserveB -= amountB;
-        totalDeposit -= userDeposit;
-        k = reserveA * reserveB;
 
         tokenA.transfer(msg.sender, amountA);
         tokenB.transfer(msg.sender, amountB);
