@@ -26,8 +26,8 @@ contract XpswapPool is XpswapERC20 {
         require(amountA > 0, "Pool: Invalid amount for token A");
         require(amountB > 0, "Pool: Invalid amount for token B");
 
-        tokenA.transferFrom(msg.sender, address(this), amountA);
-        tokenB.transferFrom(msg.sender, address(this), amountB);
+        amountA = _safeTransferFrom(tokenA, msg.sender, address(this), amountA);
+        amountB = _safeTransferFrom(tokenB, msg.sender, address(this), amountB);
         
         uint256 liquidityIn;
         uint256 liquidity = totalSupply();
@@ -46,10 +46,10 @@ contract XpswapPool is XpswapERC20 {
             liquidityIn = min(ratioA, ratioB);
             if (ratioB < ratioA) {
                 effectiveAmountA = amountB * reserveA / reserveB;
-                tokenA.transfer(msg.sender, amountA - effectiveAmountA);
+                _safeTransfer(tokenA, msg.sender, amountA - effectiveAmountA);
             } else {
                 effectiveAmountB = amountA * reserveB / reserveA;
-                tokenB.transfer(msg.sender, amountB - effectiveAmountB);
+                _safeTransfer(tokenB, msg.sender, amountB - effectiveAmountB);
             }
         }
         reserveA += effectiveAmountA;
@@ -77,10 +77,9 @@ contract XpswapPool is XpswapERC20 {
         reserveA -= amountA;
         reserveB -= amountB;
 
-        tokenA.transfer(msg.sender, amountA);
-        tokenB.transfer(msg.sender, amountB);
+        _safeTransfer(tokenA, msg.sender, amountA);
+        _safeTransfer(tokenB, msg.sender, amountB);
     }
-
 
     function swapWithOutput(uint256 outputAmount, address outputToken) public {
         console.log("<<<<<<<<<<<< SWAP >>>>>>>>>>>>>");
@@ -98,8 +97,10 @@ contract XpswapPool is XpswapERC20 {
         uint256 inputAmount = numerator / denominator;
         console.log("inputamount->>>> ", inputAmount);
 
-        tokenIn.transferFrom(msg.sender, address(this), inputAmount);
-        tokenOut.transfer(msg.sender, outputAmount);
+        inputReceived = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
+        require(inputReceived >= inputAmount, "Pool: Insufficient input amount");
+        inputAmount = inputReceived;
+        _safeTransfer(tokenOut, msg.sender, outputAmount);
 
         reserveIn += inputAmount;
         reserveOut -= (outputAmount);
@@ -114,7 +115,7 @@ contract XpswapPool is XpswapERC20 {
         console.log("<<<<<<<<<< END SWAP >>>>>>>>>>>>");
     }
 
-    function swapWithInput(uint256 inputAmount, address inputToken) public {
+    function swapWithInput(uint256 inputAmount, uint256 minOutputAmount, address inputToken) public {
         console.log("<<<<<<<<<<<< SWAP >>>>>>>>>>>>>");
         require(inputToken == address(tokenA) || inputToken == address(tokenB), "Pool: Invalid token address");
         require(inputAmount > 0, "Pool: Invalid input amount");
@@ -123,7 +124,9 @@ contract XpswapPool is XpswapERC20 {
             ? (tokenA, tokenB, reserveA, reserveB)
             : (tokenB, tokenA, reserveB, reserveA);
         
-        uint256 effectiveInputAmount = inputAmount * 997 / 1000;
+        actualInputAmount = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
+
+        uint256 effectiveInputAmount = actualInputAmount * 997 / 1000;
         require(effectiveInputAmount > 0, "Pool: Input too small after fees");
 
         uint256 numerator = effectiveInputAmount * reserveOut;
@@ -131,12 +134,12 @@ contract XpswapPool is XpswapERC20 {
         uint256 outputAmount = numerator / denominator;
 
         console.log(outputAmount);
+        require(outputAmount >= minOutputAmount, "Pool: Insufficient output amount");
         require(outputAmount < reserveOut, "Pool: Insufficient liquidity in pool");
 
-        tokenIn.transferFrom(msg.sender, address(this), inputAmount);
-        tokenOut.transfer(msg.sender, outputAmount);
+        _safeTransfer(tokenOut, msg.sender, outputAmount);
 
-        reserveIn += inputAmount;
+        reserveIn += actualInputAmount;
         reserveOut -= (outputAmount);
 
         if (inputToken == address(tokenA)) {
@@ -147,6 +150,24 @@ contract XpswapPool is XpswapERC20 {
             reserveB = reserveIn;
         }
         console.log("<<<<<<<<<< END SWAP >>>>>>>>>>>>");
+    }
+
+    function _safeTransfer(token, to, amount) private {
+        balanceBefore = token.balanceOf(address(this));
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+        balanceAfter = token.balanceOf(address(this));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
+        require(balanceBefore - amount == balanceAfter, 'Pool: Transfer amount incorrect');
+        return balanceBefore - balanceAfter;
+    }
+
+    function _safeTransferFrom(token, from, to, amount) private {
+        balanceBefore = token.balanceOf(to);
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+        balanceAfter = token.balanceOf(to);
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
+        require(balanceAfter > balanceBefore, 'Pool: Transfer amount incorrect');
+        return balanceAfter - balanceBefore;
     }
 
 }
