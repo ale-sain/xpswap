@@ -3,15 +3,18 @@ pragma solidity ^0.8.0;
 
 import "../interfaces/IERC20.sol";
 import "./XpswapERC20.sol";
+import "../lib/Math.sol";
 
 import "forge-std/console.sol";
 
 contract XpswapPool is XpswapERC20 {
+    using Math for uint256;
+
     IERC20 public tokenA;
     IERC20 public tokenB;
 
-    uint public reserveA;
-    uint public reserveB;
+    uint256 public reserveA;
+    uint256 public reserveB;
 
     uint8 txFees = 3;
 
@@ -30,20 +33,20 @@ contract XpswapPool is XpswapERC20 {
         amountB = _safeTransferFrom(tokenB, msg.sender, address(this), amountB);
         
         uint256 liquidityIn;
-        uint256 liquidity = totalSupply();
+        uint256 liquidity = totalSupply;
         uint256 liquidityMinimum = 0;
         uint256 effectiveAmountA = amountA;
         uint256 effectiveAmountB = amountB;
         
         if (liquidity == 0) {
             liquidityMinimum = 1000;
-            liquidityIn = sqrt(amountA * amountB);
+            liquidityIn = (amountA * amountB).sqrt();
             _mint(address(0), liquidityMinimum);
         }
         else {
             uint256 ratioA = amountA * liquidity / reserveA;
             uint256 ratioB = amountB * liquidity / reserveB;
-            liquidityIn = min(ratioA, ratioB);
+            liquidityIn = ratioA.min(ratioB);
             if (ratioB < ratioA) {
                 effectiveAmountA = amountB * reserveA / reserveB;
                 _safeTransfer(tokenA, msg.sender, amountA - effectiveAmountA);
@@ -61,7 +64,7 @@ contract XpswapPool is XpswapERC20 {
     }
 
     function removeLiquidity(uint liquidityOut) public {
-        uint256 liquidity = totalSupply();
+        uint256 liquidity = totalSupply;
 
         require(liquidityOut > 0, "Pool: Invalid amount for token LP");
         require(liquidityOut <= liquidity, "Pool: Invalid liquidity amount");
@@ -97,9 +100,9 @@ contract XpswapPool is XpswapERC20 {
         uint256 inputAmount = numerator / denominator;
         console.log("inputamount->>>> ", inputAmount);
 
-        inputReceived = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
-        require(inputReceived >= inputAmount, "Pool: Insufficient input amount");
-        inputAmount = inputReceived;
+        uint256 actualInputAmount = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
+        require(actualInputAmount >= inputAmount, "Pool: Insufficient input amount");
+        inputAmount = actualInputAmount;
         _safeTransfer(tokenOut, msg.sender, outputAmount);
 
         reserveIn += inputAmount;
@@ -124,7 +127,7 @@ contract XpswapPool is XpswapERC20 {
             ? (tokenA, tokenB, reserveA, reserveB)
             : (tokenB, tokenA, reserveB, reserveA);
         
-        actualInputAmount = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
+        uint256 actualInputAmount = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
 
         uint256 effectiveInputAmount = actualInputAmount * 997 / 1000;
         require(effectiveInputAmount > 0, "Pool: Input too small after fees");
@@ -152,21 +155,23 @@ contract XpswapPool is XpswapERC20 {
         console.log("<<<<<<<<<< END SWAP >>>>>>>>>>>>");
     }
 
-    function _safeTransfer(token, to, amount) private {
-        balanceBefore = token.balanceOf(address(this));
-        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
-        balanceAfter = token.balanceOf(address(this));
+    function _safeTransfer(IERC20 token, address to, uint256 amount) private {
+        uint256 balanceBefore = token.balanceOf(address(this));
+        (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
+        uint256 balanceAfter = token.balanceOf(address(this));
+    
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
         require(balanceBefore - amount == balanceAfter, 'Pool: Transfer amount incorrect');
-        return balanceBefore - balanceAfter;
     }
 
-    function _safeTransferFrom(token, from, to, amount) private {
-        balanceBefore = token.balanceOf(to);
-        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
-        balanceAfter = token.balanceOf(to);
+    function _safeTransferFrom(IERC20 token, address from, address to, uint256 amount) private returns (uint256) {
+        uint256 balanceBefore = token.balanceOf(to);
+        (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+        uint256 balanceAfter = token.balanceOf(to);
+        
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
         require(balanceAfter > balanceBefore, 'Pool: Transfer amount incorrect');
+    
         return balanceAfter - balanceBefore;
     }
 

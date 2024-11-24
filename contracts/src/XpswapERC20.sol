@@ -55,14 +55,14 @@ contract XpswapERC20 is IERC20 {
         return true;
     }
 
-    function _transfer(address from, address to, uint256 value) private returns (bool) {
+    function _transfer(address from, address to, uint256 value) internal returns (bool) {
         require(from != address(0), "Invalid sender address");
         require(to != address(0), "Invalid receiver address");
 
         return _update(from, to ,value);
     }
 
-    function _update(address from, address to, uint256 value) private returns (bool) {
+    function _update(address from, address to, uint256 value) internal returns (bool) {
         console.log("Update called");
         console.log("From:", from);
         console.log("To:", to);
