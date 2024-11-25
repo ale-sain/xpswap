@@ -31,20 +31,28 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _mint(address to, uint256 value) internal returns (bool) {
-        require(to != address(0), "Invalid receiver address");
+        balanceOf[to] += value;
+        totalSupply += value;
 
-        return _update(address(0), to, value);
+        emit Transfer(address(0), to, value);
+
+        return true;
     }
 
     function _burn(address from, uint256 value) internal returns (bool) {
-        require(from != address(0), "Invalid sender address");
+        require(from != address(0), "Burn ERC20: Invalid sender address");
 
-        return _update(from, address(0), value);
+        balanceOf[from] -= value;
+        totalSupply -= value;
+
+        emit Transfer(from, address(0), value);
+
+        return true;
     }
     
     function _approve(address owner, address spender, uint256 value, bool emitEvent) private returns (bool) {
-        require(owner != address(0), "Invalid approver address");
-        require(spender != address(0), "Invalid spender address");
+        require(owner != address(0), "Approve ERC20: Invalid approver address");
+        require(spender != address(0), "Approve ERC20: Invalid spender address");
 
         allowance[owner][spender] = value;
 
@@ -56,29 +64,17 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _transfer(address from, address to, uint256 value) internal returns (bool) {
-        require(from != address(0), "Invalid sender address");
-        require(to != address(0), "Invalid receiver address");
-
-        return _update(from, to ,value);
-    }
-
-    function _update(address from, address to, uint256 value) internal returns (bool) {
-        console.log("Update called");
         console.log("From:", from);
         console.log("To:", to);
         console.log("Transfer Value:", value);
         console.log("Balance of sender (from):", balanceOf[from]);
 
-        if (from == address(0))
-            totalSupply += value;
-        else {
-            require(balanceOf[from] >= value, "ERC20: transfer amount exceeds balance");
-            balanceOf[from] -= value;
-        }
-        if (to == address(0))
-            totalSupply -= value;
-        else
-            balanceOf[to] += value;
+        require(from != address(0), "TRansfer ERC20: Invalid sender address");
+        require(to != address(0), "TRnsferERC20: Invalid receiver address");
+        require(balanceOf[from] >= value, "ERC20: transfer amount exceeds balance");
+
+        balanceOf[from] -= value;
+        balanceOf[to] += value;
         
         emit Transfer(from, to, value);
 

@@ -34,13 +34,12 @@ contract XpswapPool is XpswapERC20 {
         
         uint256 liquidityIn;
         uint256 liquidity = totalSupply;
-        uint256 liquidityMinimum = 0;
         uint256 effectiveAmountA = amountA;
         uint256 effectiveAmountB = amountB;
         
         if (liquidity == 0) {
-            liquidityMinimum = 1000;
-            liquidityIn = (amountA * amountB).sqrt();
+            uint256 liquidityMinimum = 1000;
+            liquidityIn = (amountA * amountB).sqrt() - liquidityMinimum;
             _mint(address(0), liquidityMinimum);
         }
         else {
@@ -58,18 +57,18 @@ contract XpswapPool is XpswapERC20 {
         reserveA += effectiveAmountA;
         reserveB += effectiveAmountB;
 
-        _mint(msg.sender, liquidityIn - liquidityMinimum);
+        _mint(msg.sender, liquidityIn);
 
         console.log("<<<<<<<<<<<< END ADD LIQUIDITY >>>>>>>>>>>");
     }
 
     function removeLiquidity(uint liquidityOut) public {
+        console.log("<<<<<<<<<<<< REMOVE LIQUIDITY >>>>>>>>>>>");
         uint256 liquidity = totalSupply;
 
         require(liquidityOut > 0, "Pool: Invalid amount for token LP");
+        require(balanceOf[msg.sender] >= liquidityOut, "Pool: Insufficient LP balance");
         require(liquidityOut <= liquidity, "Pool: Invalid liquidity amount");
-
-        _burn(msg.sender, liquidityOut);
 
         uint256 amountA = (reserveA * liquidityOut) / liquidity;
         uint256 amountB = (reserveB * liquidityOut) / liquidity;
@@ -80,8 +79,10 @@ contract XpswapPool is XpswapERC20 {
         reserveA -= amountA;
         reserveB -= amountB;
 
+        _burn(msg.sender, liquidityOut);
         _safeTransfer(tokenA, msg.sender, amountA);
         _safeTransfer(tokenB, msg.sender, amountB);
+        console.log("<<<<<<<<<<<< REMOVE LIQUIDITY >>>>>>>>>>>");
     }
 
     function swapWithOutput(uint256 outputAmount, address outputToken) public {
@@ -169,6 +170,7 @@ contract XpswapPool is XpswapERC20 {
         (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
         uint256 balanceAfter = token.balanceOf(to);
         
+        console.log(success);
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
         require(balanceAfter > balanceBefore, 'Pool: Transfer amount incorrect');
     
