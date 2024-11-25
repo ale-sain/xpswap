@@ -15,7 +15,7 @@ contract XpswapERC20 is IERC20 {
     
     constructor() {}
 
-    function transfer(address to, uint256 value) public override returns (bool) {
+    function transfer(address to, uint256 value) public override virtual returns (bool) {
         return _transfer(msg.sender, to, value);
     }
 
@@ -64,10 +64,10 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _transfer(address from, address to, uint256 value) internal returns (bool) {
-        console.log("From:", from);
-        console.log("To:", to);
-        console.log("Transfer Value:", value);
-        console.log("Balance of sender (from):", balanceOf[from]);
+        // console.log("From:", from);
+        // console.log("To:", to);
+        // console.log("Transfer Value:", value);
+        // console.log("Balance of sender (from):", balanceOf[from]);
 
         require(from != address(0), "TRansfer ERC20: Invalid sender address");
         require(to != address(0), "TRnsferERC20: Invalid receiver address");

@@ -64,6 +64,7 @@ contract XpswapPool is XpswapERC20 {
 
     function removeLiquidity(uint liquidityOut) public {
         console.log("<<<<<<<<<<<< REMOVE LIQUIDITY >>>>>>>>>>>");
+
         uint256 liquidity = totalSupply;
 
         require(liquidityOut > 0, "Pool: Invalid amount for token LP");
@@ -100,7 +101,7 @@ contract XpswapPool is XpswapERC20 {
         uint256 denominator = (reserveOut - outputAmount) * (1000 - txFees);
         uint256 inputAmount = numerator / denominator;
         console.log("inputamount->>>> ", inputAmount);
-
+        console.log("reserveB = ", reserveB);
         uint256 actualInputAmount = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
         require(actualInputAmount >= inputAmount, "Pool: Insufficient input amount");
         inputAmount = actualInputAmount;
@@ -129,15 +130,21 @@ contract XpswapPool is XpswapERC20 {
             : (tokenB, tokenA, reserveB, reserveA);
         
         uint256 actualInputAmount = _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
+        console.log("actualInputAmount = ", actualInputAmount);
 
         uint256 effectiveInputAmount = actualInputAmount * 997 / 1000;
         require(effectiveInputAmount > 0, "Pool: Input too small after fees");
+        console.log("effectiveInput = ", effectiveInputAmount);
 
         uint256 numerator = effectiveInputAmount * reserveOut;
         uint256 denominator = reserveIn + effectiveInputAmount;
-        uint256 outputAmount = numerator / denominator;
+        uint256 outputAmount = numerator / denominator + 1;
 
-        console.log(outputAmount);
+        console.log("output = ", outputAmount);
+        console.log("minOut = ", minOutputAmount);
+        console.log("reserveA = ", reserveA);
+        console.log("reserveB = ", reserveOut);
+        console.log(reserveOut - outputAmount);
         require(outputAmount >= minOutputAmount, "Pool: Insufficient output amount");
         require(outputAmount < reserveOut, "Pool: Insufficient liquidity in pool");
 

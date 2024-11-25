@@ -226,7 +226,6 @@ contract XpswapPoolTest is Test {
         uint amountA = 500e18;
         uint amountB = 600e18; // More of token B
         
-        uint balanceABefore = tokenA.balanceOf(user2);
         uint balanceBBefore = tokenB.balanceOf(user2);
         
         pool.addLiquidity(amountA, amountB);
@@ -282,9 +281,6 @@ contract XpswapPoolTest is Test {
         uint totalSupply = pool.totalSupply();
         uint balanceABefore = tokenA.balanceOf(user1);
         uint balanceBBefore = tokenB.balanceOf(user1);
-
-        // Adjust totalSupply to exclude burned MINIMUM_LIQUIDITY for proportion calculations
-        uint effectiveTotalSupply = totalSupply - 1000; // Remove the burned liquidity
 
         // Remove half of the user's liquidity
         pool.removeLiquidity(lpBalance / 2);
