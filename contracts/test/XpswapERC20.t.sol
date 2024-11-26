@@ -88,7 +88,7 @@ contract XpswapERC20Test is Test {
         token.approve(bob, allowanceAmount);
 
         vm.prank(bob);
-        vm.expectRevert("ERC20: Insufficient allowance");
+        vm.expectRevert("ERC20: transfer amount exceeds allowance");
         token.transferFrom(alice, carol, transferAmount);
     }
 }

@@ -15,7 +15,7 @@ contract MockERC20 is XpswapERC20 {
 contract TestERC20 is XpswapERC20 {
     constructor() {}
 
-    function transfer(address to, uint256 value) public override pure returns (bool) {
+    function transfer() public pure returns (bool) {
         return true;
     }
 
