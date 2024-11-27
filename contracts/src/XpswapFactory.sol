@@ -11,7 +11,7 @@ import "./XpswapPool.sol";
 
 contract XpswapFactory {
 
-    mapping(bytes32 => address) public pools;
+    mapping(address => mapping(address => address)) public pools;
 
     event PoolCreated(address tokenA, address tokenB, address pool);
 
@@ -26,14 +26,20 @@ contract XpswapFactory {
         require(tokenA_ != tokenB_, "Factory: Duplicate tokens");
         require(tokenA_ != address(0), "Factory: Invalid token A address");
         require(tokenB_ != address(0), "Factory: Invalid token B address");
-        
+
         (address tokenA, address tokenB) = addressSort(tokenA_, tokenB_);
-        bytes32 hashPool = keccak256(abi.encodePacked(tokenA, tokenB));
+        require(pools[tokenA][tokenB] == address(0), "Factory: Duplicate pools");
 
-        require(pools[hashPool] == address(0), "Factory: Duplicate pools");
+        bytes memory bytecode = type(XpswapPool).creationCode;
+        bytes32 salt = keccak256(abi.encodePacked(tokenA, tokenB));
+        assembly {
+            pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
+        }
+        XpswapPool(pair).initialize(tokenA, tokenB);
+        address pool = address(new XpswapPool(tokenA, tokenB));
+        pools[tokenA][tokenB] = pool;
+        pools[tokenB][tokenA] = pool;
 
-        pools[hashPool] = address(new XpswapPool(tokenA, tokenB));
-
-        emit PoolCreated(tokenA, tokenB, address(pools[hashPool]));
+        emit PoolCreated(tokenA, tokenB, address(pools[tokenA][tokenB]));
     }
 }
