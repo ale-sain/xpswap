@@ -23,7 +23,7 @@ contract XpswapFactory {
         require(tokenA_ != tokenB_, "Factory: Duplicate tokens");
         require(tokenA_ != address(0), "Factory: Invalid token A address");
         require(tokenB_ != address(0), "Factory: Invalid token B address");
-        
+        bytes32 hash = 
         XpswapPool newPool = new XpswapPool(tokenA_, tokenB_);
         allPools.push(address(newPool));
         poolCount += 1;
