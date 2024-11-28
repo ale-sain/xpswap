@@ -32,11 +32,15 @@ contract XpswapFactory {
 
         bytes memory bytecode = type(XpswapPool).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(tokenA, tokenB));
+
+        address pool;
+
         assembly {
-            pair := create2(0, add(bytecode, 32), mload(bytecode), salt)
+            pool := create2(0, add(bytecode, 32), mload(bytecode), salt)
         }
-        XpswapPool(pair).initialize(tokenA, tokenB);
-        address pool = address(new XpswapPool(tokenA, tokenB));
+
+        XpswapPool(pool).initialize(tokenA, tokenB);
+
         pools[tokenA][tokenB] = pool;
         pools[tokenB][tokenA] = pool;
 

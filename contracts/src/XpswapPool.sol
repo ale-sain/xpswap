@@ -10,6 +10,8 @@ import "forge-std/console.sol";
 contract XpswapPool is XpswapERC20 {
     using Math for uint256;
 
+    address factory;
+
     IERC20 public tokenA;
     IERC20 public tokenB;
 
@@ -18,7 +20,12 @@ contract XpswapPool is XpswapERC20 {
 
     uint8 txFees = 3;
 
-    constructor(address tokenA_, address tokenB_) XpswapERC20() {
+    constructor() {
+        factory = msg.sender;
+    }
+
+    function initialize(address tokenA_, address tokenB_) public {
+        require(msg.sender == factory, "Pool: Only factory");
         tokenA = IERC20(tokenA_);
         tokenB = IERC20(tokenB_);
     }
