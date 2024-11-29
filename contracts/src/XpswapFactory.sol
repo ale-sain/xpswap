@@ -10,16 +10,16 @@ import "./XpswapPool.sol";
 
 
 contract XpswapFactory {
+    address public feeTo;
+    address public feeToSetter;
 
-    mapping(address => mapping(address => address)) public pools;
+    mapping(address => mapping(address => address)) public poolByToken;
+    address[] public pools;
 
     event PoolCreated(address tokenA, address tokenB, address pool);
 
-    constructor() {
-    }
-
-    function addressSort(address tokenA_, address tokenB_) private pure returns (address, address) {
-        return tokenA_ < tokenB_ ? (tokenA_, tokenB_) : (tokenB_, tokenA_);
+    constructor(address _feeToSetter) {
+        feeToSetter = _feeToSetter;
     }
 
     function createPool(address tokenA_, address tokenB_) public {
@@ -27,8 +27,9 @@ contract XpswapFactory {
         require(tokenA_ != address(0), "Factory: Invalid token A address");
         require(tokenB_ != address(0), "Factory: Invalid token B address");
 
-        (address tokenA, address tokenB) = addressSort(tokenA_, tokenB_);
-        require(pools[tokenA][tokenB] == address(0), "Factory: Duplicate pools");
+        (address tokenA, address tokenB) = tokenA_ < tokenB_ ? (tokenA_, tokenB_) : (tokenB_, tokenA_);
+        
+        require(poolByToken[tokenA][tokenB] == address(0), "Factory: Duplicate pools");
 
         bytes memory bytecode = type(XpswapPool).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(tokenA, tokenB));
@@ -41,9 +42,21 @@ contract XpswapFactory {
 
         XpswapPool(pool).initialize(tokenA, tokenB);
 
-        pools[tokenA][tokenB] = pool;
-        pools[tokenB][tokenA] = pool;
+        poolByToken[tokenA][tokenB] = pool;
+        poolByToken[tokenB][tokenA] = pool;
 
-        emit PoolCreated(tokenA, tokenB, address(pools[tokenA][tokenB]));
+        pools.push(pool);
+
+        emit PoolCreated(tokenA, tokenB, address(poolByToken[tokenA][tokenB]));
+    }
+
+    function setFeeTo(address _feeTo) public {
+        require(msg.sender == feeToSetter, "Factory: FeeToSetter only");
+        feeTo = _feeTo;
+    }
+
+    function setFeeToSetter(address _feeToSetter) external {
+        require(msg.sender == feeToSetter, 'Factory: FeeToSetter only');
+        feeToSetter = _feeToSetter;
     }
 }

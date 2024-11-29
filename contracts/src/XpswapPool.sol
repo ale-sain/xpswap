@@ -2,26 +2,36 @@
 pragma solidity ^0.8.0;
 
 import "../interfaces/IERC20.sol";
+import "./XpswapFactory.sol";
 import "./XpswapERC20.sol";
 import "../lib/Math.sol";
 
 import "forge-std/console.sol";
 
 contract XpswapPool is XpswapERC20 {
-    using Math for uint256;
-
     address factory;
 
     IERC20 public tokenA;
     IERC20 public tokenB;
 
-    uint256 public reserveA;
-    uint256 public reserveB;
+    uint public reserveA;
+    uint public reserveB;
 
-    uint8 txFees = 3;
+    uint private lastK;
+    uint8 private txFees = 3;
+    bool private mutex = false;
+
+    uint32 blockTimestampLast;
 
     constructor() {
         factory = msg.sender;
+    }
+
+    modifier reentrancyGuard() {
+        require(mutex == false, "Pool: Reentrance forbidden");
+        mutex = true;
+        _;
+        mutex = false;
     }
 
     function initialize(address tokenA_, address tokenB_) public {
@@ -30,27 +40,43 @@ contract XpswapPool is XpswapERC20 {
         tokenB = IERC20(tokenB_);
     }
 
-    function addLiquidity(uint amountA, uint amountB) public {
+    function _mintFee(address feeTo) private reentrancyGuard {
+        uint rootCurrK = Math.sqrt(reserveA * reserveB);
+        uint rootLastK = Math.sqrt(lastK);
+
+        if (rootCurrK > rootLastK) {
+            uint numerator = (rootCurrK - rootLastK) * totalSupply;
+            uint denominator = rootCurrK * 5 + rootLastK;
+            uint feeOut = numerator / denominator;
+            if (feeOut > 0) _mint(feeTo, feeOut);
+        }
+    }
+
+    function addLiquidity(uint amountA, uint amountB) public reentrancyGuard {
         require(amountA > 0, "Pool: Invalid amount for token A");
         require(amountB > 0, "Pool: Invalid amount for token B");
 
         _safeTransferFrom(tokenA, msg.sender, address(this), amountA);
         _safeTransferFrom(tokenB, msg.sender, address(this), amountB);
         
-        uint256 liquidityIn;
-        uint256 liquidity = totalSupply;
-        uint256 effectiveAmountA = amountA;
-        uint256 effectiveAmountB = amountB;
+        address feeTo = XpswapFactory(factory).feeTo();
+        uint liquidityIn = 0;
+        uint liquidity = totalSupply;
+        uint effectiveAmountA = amountA;
+        uint effectiveAmountB = amountB;
         
         if (liquidity == 0) {
-            uint256 liquidityMinimum = 1000;
-            liquidityIn = (amountA * amountB).sqrt() - liquidityMinimum;
+            uint liquidityMinimum = 1000;
+            liquidityIn = Math.sqrt(amountA * amountB) - liquidityMinimum;
             _mint(address(0), liquidityMinimum);
         }
         else {
-            uint256 ratioA = amountA * liquidity / reserveA;
-            uint256 ratioB = amountB * liquidity / reserveB;
-            liquidityIn = ratioA.min(ratioB);
+            if (feeTo != address(0))
+                _mintFee(feeTo);
+            liquidity = totalSupply;
+            uint ratioA = amountA * liquidity / reserveA;
+            uint ratioB = amountB * liquidity / reserveB;
+            liquidityIn = Math.min(ratioA, ratioB);
             if (ratioB < ratioA) {
                 effectiveAmountA = amountB * reserveA / reserveB;
                 _safeTransfer(tokenA, msg.sender, amountA - effectiveAmountA);
@@ -59,38 +85,60 @@ contract XpswapPool is XpswapERC20 {
                 _safeTransfer(tokenB, msg.sender, amountB - effectiveAmountB);
             }
         }
-
-        reserveA += effectiveAmountA;
-        reserveB += effectiveAmountB;
+        
+        _reserveUpdate();
+        
+        lastK = reserveA * reserveB;
 
         _mint(msg.sender, liquidityIn);
     }
 
-    function removeLiquidity(uint liquidityOut) public {
-        uint256 liquidity = totalSupply;
+    function _reserveUpdate() private {
+        uint balanceA = IERC20(tokenA).balanceOf(address(this));
+        uint balanceB = IERC20(tokenB).balanceOf(address(this));
+
+        reserveA = balanceA;
+        reserveB = balanceB;
+
+        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
+        uint32 timeElapsed = uint32(blockTimestamp - blockTimestampLast) % 2**32;
+        if (timeElapsed > 0 && reserveA != 0 && reserveB != 0) {
+            // * never overflows, and + overflow is desired
+            price0CumulativeLast += uint(UQ112x112.encode(reserveB).uqdiv(reserveA)) * timeElapsed;
+            price1CumulativeLast += uint(UQ112x112.encode(reserveA).uqdiv(reserveB)) * timeElapsed;
+        }
+        reserve0 = uint112(balance0);
+        reserve1 = uint112(balance1);
+        blockTimestampLast = blockTimestamp;
+        emit Sync(reserve0, reserve1);
+    }
+
+    function removeLiquidity(uint liquidityOut) public reentrancyGuard {
+        uint liquidity = totalSupply;
+        lastK = reserveA * reserveB;
 
         require(liquidityOut > 0, "Pool: Invalid amount for token LP");
         require(balanceOf[msg.sender] >= liquidityOut, "Pool: Insufficient LP balance");
         require(liquidityOut <= liquidity, "Pool: Invalid liquidity amount");
 
-        uint256 amountA = (reserveA * liquidityOut) / liquidity;
-        uint256 amountB = (reserveB * liquidityOut) / liquidity;
+        uint amountA = (reserveA * liquidityOut) / liquidity;
+        uint amountB = (reserveB * liquidityOut) / liquidity;
 
         require(amountA < reserveA, "Pool: Insufficient liquidity in pool");
         require(amountB < reserveB, "Pool: Insufficient liquidity in pool");
 
-        reserveA -= amountA;
-        reserveB -= amountB;
-
         _burn(msg.sender, liquidityOut);
         _safeTransfer(tokenA, msg.sender, amountA);
         _safeTransfer(tokenB, msg.sender, amountB);
+
+        _reserveUpdate();
     }
 
-    function swapWithOutput(uint256 outputAmount, address outputToken) public {
+    function swapWithOutput(uint256 outputAmount, address outputToken) public reentrancyGuard {
         require(outputToken == address(tokenA) || outputToken == address(tokenB), "Pool: Invalid token address");
         require(outputAmount > 0, "Pool: Invalid output amount");
         
+        lastK = reserveA * reserveB;
         (IERC20 tokenOut, IERC20 tokenIn, uint256 reserveOut, uint256 reserveIn) = 
             outputToken == address(tokenA)
             ? (tokenA, tokenB, reserveA, reserveB)
@@ -98,29 +146,21 @@ contract XpswapPool is XpswapERC20 {
         
         require(outputAmount < reserveOut, "Pool: Insufficient liquidity in pool");
 
-        uint256 numerator = outputAmount * reserveIn * 1000;
-        uint256 denominator = (reserveOut - outputAmount) * (1000 - txFees);
-        uint256 inputAmount = numerator / denominator;
+        uint numerator = outputAmount * reserveIn * 1000;
+        uint denominator = (reserveOut - outputAmount) * (1000 - txFees);
+        uint inputAmount = numerator / denominator;
     
         _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
         _safeTransfer(tokenOut, msg.sender, outputAmount);
 
-        reserveIn += inputAmount;
-        reserveOut -= (outputAmount);
-
-        if (outputToken == address(tokenA)) {
-            reserveA = reserveOut;
-            reserveB = reserveIn;
-        } else {
-            reserveA = reserveIn;
-            reserveB = reserveOut;
-        }
+        _reserveUpdate();
     }
 
-    function swapWithInput(uint256 inputAmount, uint256 minOutputAmount, address inputToken) public {
+    function swapWithInput(uint256 inputAmount, uint256 minOutputAmount, address inputToken) public reentrancyGuard {
         require(inputToken == address(tokenA) || inputToken == address(tokenB), "Pool: Invalid token address");
         require(inputAmount > 0, "Pool: Invalid input amount");
         
+        lastK = reserveA * reserveB;
         (IERC20 tokenIn, IERC20 tokenOut, uint256 reserveIn, uint256 reserveOut) = 
             inputToken == address(tokenA)
             ? (tokenA, tokenB, reserveA, reserveB)
@@ -128,36 +168,27 @@ contract XpswapPool is XpswapERC20 {
         
         _safeTransferFrom(tokenIn, msg.sender, address(this), inputAmount);
 
-        uint256 effectiveInputAmount = inputAmount * 997 / 1000;
+        uint effectiveInputAmount = inputAmount * 997 / 1000;
         require(effectiveInputAmount > 0, "Pool: Input too small after fees");
 
-        uint256 numerator = effectiveInputAmount * reserveOut;
-        uint256 denominator = reserveIn + effectiveInputAmount;
-        uint256 outputAmount = numerator / denominator + 1;
+        uint numerator = effectiveInputAmount * reserveOut;
+        uint denominator = reserveIn + effectiveInputAmount;
+        uint outputAmount = numerator / denominator + 1;
 
         require(outputAmount >= minOutputAmount, "Pool: Insufficient output amount");
         require(outputAmount < reserveOut, "Pool: Insufficient liquidity in pool");
 
         _safeTransfer(tokenOut, msg.sender, outputAmount);
 
-        reserveIn += inputAmount;
-        reserveOut -= (outputAmount);
-
-        if (inputToken == address(tokenA)) {
-            reserveA = reserveIn;
-            reserveB = reserveOut;
-        } else {
-            reserveA = reserveOut;
-            reserveB = reserveIn;
-        }
+        _reserveUpdate();
     }
 
-    function _safeTransfer(IERC20 token, address to, uint256 amount) private {
+    function _safeTransfer(IERC20 token, address to, uint256 amount) private reentrancyGuard {
         (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
 
-    function _safeTransferFrom(IERC20 token, address from, address to, uint256 amount) private {
+    function _safeTransferFrom(IERC20 token, address from, address to, uint256 amount) private reentrancyGuard {
         (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
