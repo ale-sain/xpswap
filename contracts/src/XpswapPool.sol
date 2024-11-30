@@ -5,23 +5,27 @@ import "../interfaces/IERC20.sol";
 import "./XpswapFactory.sol";
 import "./XpswapERC20.sol";
 import "../lib/Math.sol";
+import "../lib/UQ112x112.sol";
 
 import "forge-std/console.sol";
 
 contract XpswapPool is XpswapERC20 {
     address factory;
+    using UQ112x112 for uint224;
 
     IERC20 public tokenA;
     IERC20 public tokenB;
 
-    uint public reserveA;
-    uint public reserveB;
+    uint112 public reserveA;
+    uint112 public reserveB;
 
     uint private lastK;
     uint8 private txFees = 3;
     bool private mutex = false;
 
     uint32 blockTimestampLast;
+    uint priceACumulativeLast;
+    uint priceBCumulativeLast;
 
     constructor() {
         factory = msg.sender;
@@ -97,20 +101,17 @@ contract XpswapPool is XpswapERC20 {
         uint balanceA = IERC20(tokenA).balanceOf(address(this));
         uint balanceB = IERC20(tokenB).balanceOf(address(this));
 
-        reserveA = balanceA;
-        reserveB = balanceB;
-
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
-        uint32 timeElapsed = uint32(blockTimestamp - blockTimestampLast) % 2**32;
+        uint32 timeElapsed = uint32((blockTimestamp - blockTimestampLast) % 2**32);
+        
         if (timeElapsed > 0 && reserveA != 0 && reserveB != 0) {
-            // * never overflows, and + overflow is desired
-            price0CumulativeLast += uint(UQ112x112.encode(reserveB).uqdiv(reserveA)) * timeElapsed;
-            price1CumulativeLast += uint(UQ112x112.encode(reserveA).uqdiv(reserveB)) * timeElapsed;
+            priceACumulativeLast += uint(UQ112x112.encode(reserveB).uqdiv(reserveA)) * timeElapsed;
+            priceBCumulativeLast += uint(UQ112x112.encode(reserveA).uqdiv(reserveB)) * timeElapsed;
         }
-        reserve0 = uint112(balance0);
-        reserve1 = uint112(balance1);
+
+        reserveA = uint112(balanceA);
+        reserveB = uint112(balanceB);
         blockTimestampLast = blockTimestamp;
-        emit Sync(reserve0, reserve1);
     }
 
     function removeLiquidity(uint liquidityOut) public reentrancyGuard {
