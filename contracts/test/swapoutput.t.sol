@@ -3,59 +3,82 @@ pragma solidity ^0.8.0;
 
 import "forge-std/Test.sol";
 import "../src/XpswapPool.sol";
+import "../src/XpswapERC20.sol";
+import "../src/XpswapFactory.sol";
+import "../lib/Math.sol";
 
+// Mock contracts needed for testing
 contract MockERC20 is XpswapERC20 {
-    constructor() {}
+    string internal _name;
+    string internal _symbol;
+    uint8 internal _decimals;
+
+    constructor(
+        string memory name_,
+        string memory symbol_,
+        uint8 decimals_
+    ) {
+        _name = name_;
+        _symbol = symbol_;
+        _decimals = decimals_;
+    }
 
     function mint(address to, uint256 amount) external {
         _mint(to, amount);
     }
 }
 
-contract TestERC20 is XpswapERC20 {
-    constructor() {}
+contract XpswapPoolWithFactoryTest is Test {
+    using Math for uint256;
 
-    function transfer() public pure returns (bool) {
-        return true;
-    }
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
-
-contract XpswapPoolTest is Test {
-    XpswapPool public pool;
-    XpswapPool public pool2;
     MockERC20 public tokenA;
     MockERC20 public tokenB;
-    TestERC20 public tokenC;
+    XpswapFactory public factory;
+    XpswapPool public pool;
 
-    address public user = address(0x1);
+    address public user;
+    address public otherUser;
+    address public feeToSetter;
+    address public feeTo;
 
     function setUp() public {
-        // Deploy mock tokens
-        tokenA = new MockERC20();
-        tokenB = new MockERC20();
-        tokenC = new TestERC20();
+        // Deploy standard tokens
+        tokenA = new MockERC20("Token A", "TKNA", 18);
+        tokenB = new MockERC20("Token B", "TKNB", 18);
 
-        // Mint initial balances
-        tokenA.mint(user, 1000 ether);
-        tokenB.mint(user, 1000 ether);
-        tokenC.mint(user, 1000 ether);
+        // Setup roles
+        feeToSetter = makeAddr("feeToSetter");
+        feeTo = makeAddr("feeTo");
 
-        // Deploy pool
-        pool = new XpswapPool(address(tokenA), address(tokenB));
+        // Deploy factory
+        factory = new XpswapFactory(feeToSetter);
 
-        // Approve tokens for pool
+        // Create pool via factory
+        vm.prank(feeToSetter);
+        factory.createPool(address(tokenA), address(tokenB));
+
+        address poolAddress = factory.poolByToken(address(tokenA), address(tokenB));
+        pool = XpswapPool(poolAddress);
+
+        // Setup test users
+        user = makeAddr("user");
+        otherUser = makeAddr("otherUser");
+
+        // Mint tokens to users
+        tokenA.mint(user, 1_000_000e18);
+        tokenB.mint(user, 1_000_000e18);
+        tokenA.mint(otherUser, 1_000_000e18);
+        tokenB.mint(otherUser, 1_000_000e18);
+
+        // Approve pool to spend tokens
         vm.startPrank(user);
-        tokenA.approve(address(pool), type(uint256).max);
-        tokenB.approve(address(pool), type(uint256).max);
-        tokenC.approve(address(pool), type(uint256).max);
+        tokenA.approve(poolAddress, type(uint256).max);
+        tokenB.approve(poolAddress, type(uint256).max);
+        vm.stopPrank();
 
-        // Add initial liquidity
-        pool.addLiquidity(500 ether, 500 ether);
-
+        vm.startPrank(otherUser);
+        tokenA.approve(poolAddress, type(uint256).max);
+        tokenB.approve(poolAddress, type(uint256).max);
         vm.stopPrank();
     }
 
