@@ -13,13 +13,17 @@ contract XpswapFactory {
     address public feeTo;
     address public feeToSetter;
 
-    mapping(address => mapping(address => address)) public poolByToken;
-    address[] public pools;
+    mapping(address => mapping(address => address)) public getPools;
+    address[] public allPools;
 
-    event PoolCreated(address tokenA, address tokenB, address pool);
+    event PoolCreated(address tokenA, address tokenB, address pool, uint);
 
     constructor(address _feeToSetter) {
         feeToSetter = _feeToSetter;
+    }
+    
+    function allPoolsLength() external view returns (uint) {
+        return allPools.length;
     }
 
     function createPool(address tokenA_, address tokenB_) public {
@@ -29,7 +33,7 @@ contract XpswapFactory {
 
         (address tokenA, address tokenB) = tokenA_ < tokenB_ ? (tokenA_, tokenB_) : (tokenB_, tokenA_);
         
-        require(poolByToken[tokenA][tokenB] == address(0), "Factory: Duplicate pools");
+        require(getPools[tokenA][tokenB] == address(0), "Factory: Duplicate aPools");
 
         bytes memory bytecode = type(XpswapPool).creationCode;
         bytes32 salt = keccak256(abi.encodePacked(tokenA, tokenB));
@@ -42,12 +46,12 @@ contract XpswapFactory {
 
         XpswapPool(pool).initialize(tokenA, tokenB);
 
-        poolByToken[tokenA][tokenB] = pool;
-        poolByToken[tokenB][tokenA] = pool;
+        getPools[tokenA][tokenB] = pool;
+        getPools[tokenB][tokenA] = pool;
 
-        pools.push(pool);
+        allPools.push(pool);
 
-        emit PoolCreated(tokenA, tokenB, address(poolByToken[tokenA][tokenB]));
+        emit PoolCreated(tokenA, tokenB, address(getPools[tokenA][tokenB]));
     }
 
     function setFeeTo(address _feeTo) public {

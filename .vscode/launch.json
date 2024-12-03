@@ -1,0 +1,12 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "solidity",
+            "request": "launch",
+            "name": "Debug Solidity (via contract entry point)",
+            "debugAdapterFile": ""
+        }
+    ],
+    "compounds": []
+}
