@@ -27,6 +27,18 @@ contract XpswapPool is XpswapERC20 {
     uint priceACumulativeLast;
     uint priceBCumulativeLast;
 
+    event Mint(address indexed to, uint amountAIn, uint amountBIn);
+    event Burn(address indexed from, address indexed to, uint amountAOut, uint amountBOut);
+    event Swap(
+        address indexed from,
+        address indexed to,
+        uint amountAIn,
+        uint amountBIn, 
+        uint amountAOut,
+        uint amountBOut
+    );
+    event Sync(uint reserveA, uint reserveB);
+
     constructor() {
         factory = msg.sender;
     }
@@ -50,11 +62,11 @@ contract XpswapPool is XpswapERC20 {
         return (_reserveA, _reserveB);
     }
 
-    function addLiquidity(address to) public reentrancyGuard {
+    function mint(address to) public reentrancyGuard {
         (uint112 _reserveA, uint112 _reserveB) = _getReserves();
 
-        uint112 amountA = uint112(IERC20(tokenA).balanceOf(address(this))) - _reserveA;
-        uint112 amountB = uint112(IERC20(tokenB).balanceOf(address(this))) - _reserveB;
+        uint112 amountA = uint112(tokenA.balanceOf(address(this))) - _reserveA;
+        uint112 amountB = uint112(tokenB.balanceOf(address(this))) - _reserveB;
 
         require(amountA > 0, "Pool: Invalid amount for token A");
         require(amountB > 0, "Pool: Invalid amount for token B");
@@ -87,9 +99,11 @@ contract XpswapPool is XpswapERC20 {
         _reserveUpdate();
         if (feeOn) lastK = uint(reserveA) * uint(reserveB);
         if (liquidityIn > 0) _mint(to, liquidityIn);
+
+        emit Mint(to, effectiveAmountA, effectiveAmountB);
     }
 
-    function removeLiquidity(address to) public reentrancyGuard {
+    function burn(address to) public reentrancyGuard {
         (uint112 _reserveA, uint112 _reserveB) = _getReserves();
         uint _totalSupply = totalSupply;
         bool feeOn = _mintFee(_reserveA, _reserveB);
@@ -111,6 +125,8 @@ contract XpswapPool is XpswapERC20 {
         if (feeOn) lastK = uint(reserveA) * uint(reserveB);
     
         _burn(address(this), liquidityOut);
+
+        emit Burn(msg.sender, to, amountA, amountB);
     }
 
     function swap(uint amountAOut, uint amountBOut, address to) public reentrancyGuard {
@@ -120,8 +136,8 @@ contract XpswapPool is XpswapERC20 {
         require(amountAOut > 0 || amountBOut > 0, "Pool: Invalid output amount");
         require(amountAOut < _reserveA && amountBOut < _reserveB, "Pool: Insufficient liquidity");
 
-        uint balanceA = IERC20(tokenA).balanceOf(address(this));
-        uint balanceB = IERC20(tokenB).balanceOf(address(this));
+        uint balanceA = tokenA.balanceOf(address(this));
+        uint balanceB = tokenB.balanceOf(address(this));
 
         uint amountAIn = amountBOut > 0 ? (balanceA - _reserveA) * (1000 - _txFees) / 1000 : 0;
         uint amountBIn = amountAOut > 0 ? (balanceB - _reserveB) * (1000 - _txFees) / 1000 : 0;
@@ -134,11 +150,13 @@ contract XpswapPool is XpswapERC20 {
         require((balanceA - amountAOut) * (balanceB - amountBOut) >= lastK , "Pool: invalid constant product k");
 
         _reserveUpdate();
+
+        emit Swap(msg.sender, to, amountAIn, amountBIn, amountAOut, amountBOut);
     }
 
     function _reserveUpdate() private {
-        uint balanceA = IERC20(tokenA).balanceOf(address(this));
-        uint balanceB = IERC20(tokenB).balanceOf(address(this));
+        uint balanceA = tokenA.balanceOf(address(this));
+        uint balanceB = tokenB.balanceOf(address(this));
 
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
         uint32 timeElapsed = uint32((blockTimestamp - blockTimestampLast) % 2**32);
@@ -151,6 +169,8 @@ contract XpswapPool is XpswapERC20 {
         reserveA = uint112(balanceA);
         reserveB = uint112(balanceB);
         blockTimestampLast = blockTimestamp;
+        
+        emit Sync(reserveA, reserveB);
     }
 
     function _mintFee(uint112 _reserveA, uint112 _reserveB) private returns (bool) {
@@ -174,8 +194,20 @@ contract XpswapPool is XpswapERC20 {
         return feeOn;
     }
 
+    function skim(address to) external reentrancyGuard {
+        IERC20 _tokenA = tokenA;
+        IERC20 _tokenB = tokenB;
+        _safeTransfer(_tokenA, to, _tokenA.balanceOf(address(this)) - reserveA);
+        _safeTransfer(_tokenB, to, _tokenB.balanceOf(address(this)) - reserveB);
+    }
+
+    function sync() external reentrancyGuard {
+        _reserveUpdate();
+    }
+
     function _safeTransfer(IERC20 token, address to, uint256 amount) private {
         (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
+
 }
