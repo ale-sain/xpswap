@@ -129,23 +129,23 @@ contract XpswapPool is XpswapERC20 {
         emit Burn(msg.sender, to, amountA, amountB);
     }
 
-    function swap(uint amountAOut, uint amountBOut, address to) public reentrancyGuard {
+    function swap(uint amountAOut, uint amountBOut, address to, bytes calldata data) public reentrancyGuard {
         (uint _reserveA, uint _reserveB) = _getReserves();
         uint8 _txFees = txFees;
 
         require(amountAOut > 0 || amountBOut > 0, "Pool: Invalid output amount");
         require(amountAOut < _reserveA && amountBOut < _reserveB, "Pool: Insufficient liquidity");
+        require(amountAIn > 0 || amountBIn > 0, "Pool: Insufficient input amount");
 
+        if (amountAOut > 0 ) _safeTransfer(tokenA, to, amountAOut);
+        if (amountBOut > 0 ) _safeTransfer(tokenB, to, amountBOut);
+        if (data.length > 0) ICallee(to).xpswapCall(msg.sender, amount0Out, amount1Out, data);
+        
         uint balanceA = tokenA.balanceOf(address(this));
         uint balanceB = tokenB.balanceOf(address(this));
 
         uint amountAIn = amountBOut > 0 ? (balanceA - _reserveA) * (1000 - _txFees) / 1000 : 0;
         uint amountBIn = amountAOut > 0 ? (balanceB - _reserveB) * (1000 - _txFees) / 1000 : 0;
-
-        require(amountAIn > 0 || amountBIn > 0, "Pool: Insufficient input amount");
-
-        if (amountAOut > 0 ) _safeTransfer(tokenA, to, amountAOut);
-        if (amountBOut > 0 ) _safeTransfer(tokenB, to, amountBOut);
 
         require((balanceA - amountAOut) * (balanceB - amountBOut) >= lastK , "Pool: invalid constant product k");
 
