@@ -4,5 +4,5 @@
 
 ---
 
-## 📘 **Project Status**
+## **Project Status**
 Currently under development — **Smart contracts are being written and tested**. The Next.js frontend and full integration with Foundry will be built after the smart contract logic is complete.
