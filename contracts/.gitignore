@@ -1,7 +1,8 @@
 # Compiler files
 cache/
 out/
-lib/
+lib/forge-std
+lib/v4-periphery
 
 # Ignores development broadcast logs
 !/broadcast
