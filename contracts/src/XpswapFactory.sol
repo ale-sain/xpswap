@@ -21,10 +21,6 @@ contract XpswapFactory {
     constructor(address _feeToSetter) {
         feeToSetter = _feeToSetter;
     }
-    
-    function allPoolsLength() external view returns (uint) {
-        return allPools.length;
-    }
 
     function createPool(address tokenA_, address tokenB_) public {
         require(tokenA_ != tokenB_, "Factory: Duplicate tokens");
@@ -35,23 +31,14 @@ contract XpswapFactory {
         
         require(getPools[tokenA][tokenB] == address(0), "Factory: Duplicate aPools");
 
-        bytes memory bytecode = type(XpswapPool).creationCode;
-        bytes32 salt = keccak256(abi.encodePacked(tokenA, tokenB));
-
-        address pool;
-
-        assembly {
-            pool := create2(0, add(bytecode, 32), mload(bytecode), salt)
-        }
-
-        XpswapPool(pool).initialize(tokenA, tokenB);
+        address pool = address(new XpswapPool(tokenA, tokenB));
 
         getPools[tokenA][tokenB] = pool;
         getPools[tokenB][tokenA] = pool;
 
         allPools.push(pool);
 
-        emit PoolCreated(tokenA, tokenB, address(getPools[tokenA][tokenB]));
+        emit PoolCreated(tokenA, tokenB, address(getPools[tokenA][tokenB]), allPools.length);
     }
 
     function setFeeTo(address _feeTo) public {

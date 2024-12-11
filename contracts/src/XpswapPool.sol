@@ -40,8 +40,10 @@ contract XpswapPool is XpswapERC20 {
     );
     event Sync(uint reserveA, uint reserveB);
 
-    constructor() {
+    constructor(address tokenA_, address tokenB_) {
         factory = msg.sender;
+        tokenA = IERC20(tokenA_);
+        tokenB = IERC20(tokenB_);
     }
 
     modifier reentrancyGuard() {
@@ -49,12 +51,6 @@ contract XpswapPool is XpswapERC20 {
         mutex = true;
         _;
         mutex = false;
-    }
-
-    function initialize(address tokenA_, address tokenB_) public {
-        require(msg.sender == factory, "Pool: Only factory");
-        tokenA = IERC20(tokenA_);
-        tokenB = IERC20(tokenB_);
     }
 
     function getReserves() public view returns (uint112, uint112) {
