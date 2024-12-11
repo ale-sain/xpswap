@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "../interfaces/IERC20.sol";
-import "./XpswapFactory.sol";
+import "../interfaces/ICallee.sol";
+import "../interfaces/IFactory.sol";
 import "./XpswapERC20.sol";
+
 import "../lib/Math.sol";
 import "../lib/UQ112x112.sol";
 
@@ -56,14 +57,14 @@ contract XpswapPool is XpswapERC20 {
         tokenB = IERC20(tokenB_);
     }
 
-    function _getReserves() private view returns (uint112, uint112) {
+    function getReserves() public view returns (uint112, uint112) {
         uint112 _reserveA = reserveA;
         uint112 _reserveB = reserveB;
         return (_reserveA, _reserveB);
     }
 
     function mint(address to) public reentrancyGuard {
-        (uint112 _reserveA, uint112 _reserveB) = _getReserves();
+        (uint112 _reserveA, uint112 _reserveB) = getReserves();
 
         uint112 amountA = uint112(tokenA.balanceOf(address(this))) - _reserveA;
         uint112 amountB = uint112(tokenB.balanceOf(address(this))) - _reserveB;
@@ -98,13 +99,15 @@ contract XpswapPool is XpswapERC20 {
 
         _reserveUpdate();
         if (feeOn) lastK = uint(reserveA) * uint(reserveB);
-        if (liquidityIn > 0) _mint(to, liquidityIn);
+    
+        require(liquidity > 0, "Pool: insufficient liquidity mint");
+        _mint(to, liquidityIn);
 
         emit Mint(to, effectiveAmountA, effectiveAmountB);
     }
 
     function burn(address to) public reentrancyGuard {
-        (uint112 _reserveA, uint112 _reserveB) = _getReserves();
+        (uint112 _reserveA, uint112 _reserveB) = getReserves();
         uint _totalSupply = totalSupply;
         bool feeOn = _mintFee(_reserveA, _reserveB);
         uint liquidityOut = balanceOf[address(this)];
@@ -129,23 +132,22 @@ contract XpswapPool is XpswapERC20 {
         emit Burn(msg.sender, to, amountA, amountB);
     }
 
-    function swap(uint amountAOut, uint amountBOut, address to, bytes calldata data) public reentrancyGuard {
-        (uint _reserveA, uint _reserveB) = _getReserves();
+    function swap(uint amountAOut, uint amountBOut, address to) public reentrancyGuard {
+        (uint _reserveA, uint _reserveB) = getReserves();
         uint8 _txFees = txFees;
 
         require(amountAOut > 0 || amountBOut > 0, "Pool: Invalid output amount");
         require(amountAOut < _reserveA && amountBOut < _reserveB, "Pool: Insufficient liquidity");
-        require(amountAIn > 0 || amountBIn > 0, "Pool: Insufficient input amount");
 
         if (amountAOut > 0 ) _safeTransfer(tokenA, to, amountAOut);
         if (amountBOut > 0 ) _safeTransfer(tokenB, to, amountBOut);
-        if (data.length > 0) ICallee(to).xpswapCall(msg.sender, amount0Out, amount1Out, data);
         
         uint balanceA = tokenA.balanceOf(address(this));
         uint balanceB = tokenB.balanceOf(address(this));
 
         uint amountAIn = amountBOut > 0 ? (balanceA - _reserveA) * (1000 - _txFees) / 1000 : 0;
         uint amountBIn = amountAOut > 0 ? (balanceB - _reserveB) * (1000 - _txFees) / 1000 : 0;
+        require(amountAIn > 0 || amountBIn > 0, "Pool: Insufficient input amount");
 
         require((balanceA - amountAOut) * (balanceB - amountBOut) >= lastK , "Pool: invalid constant product k");
 
@@ -157,24 +159,12 @@ contract XpswapPool is XpswapERC20 {
     function _reserveUpdate() private {
         uint balanceA = tokenA.balanceOf(address(this));
         uint balanceB = tokenB.balanceOf(address(this));
-
-        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
-        uint32 timeElapsed = uint32((blockTimestamp - blockTimestampLast) % 2**32);
-        
-        if (timeElapsed > 0 && reserveA != 0 && reserveB != 0) {
-            priceACumulativeLast += uint(UQ112x112.encode(reserveB).uqdiv(reserveA)) * timeElapsed;
-            priceBCumulativeLast += uint(UQ112x112.encode(reserveA).uqdiv(reserveB)) * timeElapsed;
-        }
-
         reserveA = uint112(balanceA);
         reserveB = uint112(balanceB);
-        blockTimestampLast = blockTimestamp;
-        
-        emit Sync(reserveA, reserveB);
     }
 
     function _mintFee(uint112 _reserveA, uint112 _reserveB) private returns (bool) {
-        address feeTo = XpswapFactory(factory).feeTo();
+        address feeTo = IFactory(factory).feeTo();
         bool feeOn = feeTo != address(0);
 
         uint rootCurrK = Math.sqrt(_reserveA * _reserveB);
@@ -192,17 +182,6 @@ contract XpswapPool is XpswapERC20 {
             lastK = 0;
 
         return feeOn;
-    }
-
-    function skim(address to) external reentrancyGuard {
-        IERC20 _tokenA = tokenA;
-        IERC20 _tokenB = tokenB;
-        _safeTransfer(_tokenA, to, _tokenA.balanceOf(address(this)) - reserveA);
-        _safeTransfer(_tokenB, to, _tokenB.balanceOf(address(this)) - reserveB);
-    }
-
-    function sync() external reentrancyGuard {
-        _reserveUpdate();
     }
 
     function _safeTransfer(IERC20 token, address to, uint256 amount) private {

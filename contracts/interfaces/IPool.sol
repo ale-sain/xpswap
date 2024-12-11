@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "../interfaces/IERC20.sol";
+import "../interfaces/IXpswapERC20.sol";
 
 // Can you transform following code into an corresponding interface?
-interface IPool {
+interface IPool is IXpswapERC20 {
     function tokenA() external view returns (IERC20);
     function tokenB() external view returns (IERC20);
     function reserveA() external view returns (uint112);
@@ -25,6 +25,7 @@ interface IPool {
     event Sync(uint reserveA, uint reserveB);
 
     function initialize(address tokenA_, address tokenB_) external; 
+    function getReserves() external view returns (uint112, uint112);
 
     function mint(address to) external;
     function burn(address to) external;

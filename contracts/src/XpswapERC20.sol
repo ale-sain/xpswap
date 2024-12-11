@@ -40,7 +40,7 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _burn(address from, uint256 value) internal returns (bool) {
-        require(from != address(0), "Burn ERC20: Invalid sender address");
+        require(from != address(0), "XpswapERC20: Invalid sender address");
 
         balanceOf[from] -= value;
         totalSupply -= value;
@@ -64,14 +64,9 @@ contract XpswapERC20 is IERC20 {
     }
 
     function _transfer(address from, address to, uint256 value) internal returns (bool) {
-        // console.log("From:", from);
-        // console.log("To:", to);
-        // console.log("Transfer Value:", value);
-        // console.log("Balance of sender (from):", balanceOf[from]);
-
-        require(from != address(0), "TRansfer ERC20: Invalid sender address");
-        require(to != address(0), "TRnsferERC20: Invalid receiver address");
-        require(balanceOf[from] >= value, "ERC20: transfer amount exceeds balance");
+        require(from != address(0), "XpswapERC20: Invalid sender address");
+        require(to != address(0), "XpswapERC20: Invalid receiver address");
+        require(balanceOf[from] >= value, "XpswapERC20: transfer amount exceeds balance");
 
         balanceOf[from] -= value;
         balanceOf[to] += value;
@@ -84,7 +79,7 @@ contract XpswapERC20 is IERC20 {
     function _spendAllowance(address owner, address spender, uint256 value) private {
         uint256 currentAllowance = allowance[owner][spender];
         if (currentAllowance < type(uint256).max) {
-            require(allowance[owner][msg.sender] >= value, "ERC20: transfer amount exceeds allowance");
+            require(allowance[owner][msg.sender] >= value, "XpswapERC20: transfer amount exceeds allowance");
             unchecked {
                 _approve(owner, spender, currentAllowance - value, false);
             }
