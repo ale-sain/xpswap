@@ -1,6 +1,6 @@
 # Xpswap
 
-**Xpswap** is a mini-replica of **Uniswap V2**, built using **Solidity**, **Foundry**, and **Next.js**. The project aims to recreate the core mechanics of Uniswap, focusing on decentralized token swapping, liquidity pools, and automated market making (AMM). 
+**Xpswap** is a simple basic DEX, built using **Solidity**, **Foundry**, and **Next.js**. The project aims to recreate the core mechanics of Uniswap, focusing on decentralized token swapping, liquidity pools, and automated market making (AMM). 
 
 ---
 
