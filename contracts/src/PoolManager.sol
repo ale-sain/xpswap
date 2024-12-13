@@ -7,6 +7,8 @@ contract PoolManager {
         address token0;
         address token1;
         uint24 fee;
+        uint reserve0;
+        uint reserve1;
     }
 
     mapping(bytes32 => Pool) public pools;
@@ -29,7 +31,9 @@ contract PoolManager {
         pools[poolId] = Pool({
             token0: token0_,
             token1: token1_,
-            fee: fee
+            fee: fee,
+            reserve0: 0,
+            reserve1: 0
         });
 
         emit PoolCreated(token0, token1, fee, poolId);

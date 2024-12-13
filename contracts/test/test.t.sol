@@ -57,6 +57,8 @@ contract BasicTest is Test {
         assertEq(id, _returnId(), "Wrong id");
         assertNotEq(pool.token0, address(0), "Pool inexistant");
         assertEq(pool.fee, fee, "Wrong fee");
+
+
         vm.stopPrank();
     }
 
@@ -101,6 +103,7 @@ contract BasicTest is Test {
         vm.stopPrank();
     }
 
+
     function testDeleteInexistantPool() public {
         vm.startPrank(user1);
 
@@ -117,17 +120,25 @@ contract BasicTest is Test {
         return keccak256(abi.encodePacked(token0_, token1_, fee));
     }
 
-    // function addLiquidity() public {
-    //     createPool();
-    //     vm.startPrank(user1);
+    function addLiquidity() public {
+        testCreatePool();
+        vm.startPrank(user1);
 
-    //     uint token0before = token0.balanceOf(user1);
-    //     uint token1before = token1.balanceOf(user1);
+        uint token0BeforeUser = token0.balanceOf(user1);
+        uint token1BeforeUser = token1.balanceOf(user1);
+        uint token0BeforePool = token0.balanceOf(poolManager);
+        uint token1BeforePool = token1.balanceOf(poolManager);
+        
+        poolManager.addLiquidity(pool, 10 * 1e18, 10000 * 1e18);
 
-    //     poolManager.addLiquidity(pool, 10 * 1e18, 10000 * 1e18);
-    //     assertEq(pool.reserveA(), 500 ether - outputAmount, "Incorrect reserve for token A");
-    //     assertEq(pool.reserveA(), 500 ether - outputAmount, "Incorrect reserve for token A");
+        uint token0AfterUser = token0.balanceOf(user1);
+        uint token1AfterUser = token1.balanceOf(user1);
+        uint token0AfterPool = token0.balanceOf(poolManager);
+        uint token1AfterPool = token1.balanceOf(poolManager);
 
-    //     vm.stopPrank();
-    // }
+        assertEq(pool.reserveA(), 500 ether - outputAmount, "Incorrect reserve for token A");
+        assertEq(pool.reserveA(), 500 ether - outputAmount, "Incorrect reserve for token A");
+
+        vm.stopPrank();
+    }
 }
