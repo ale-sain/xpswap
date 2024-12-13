@@ -6,10 +6,6 @@ interface IFactory {
 
   function getPool(address tokenA, address tokenB) external view returns (address pool);
   function allPools(uint) external view returns (address pool);
-  function allPoolsLength() external view returns (uint);
 
-  function feeTo() external view returns (address);
-  function feeToSetter() external view returns (address);
-
-  function createPool(address tokenA, address tokenB) external returns (address pool);
+  function createPool(address tokenA, address tokenB, uint8 fee) external returns (address pool);
 }

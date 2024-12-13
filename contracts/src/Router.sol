@@ -18,38 +18,40 @@ contract Router {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
 
-    function _addLiquidity(address tokenA,address tokenB,uint amountADesired,uint amountBDesired,uint amountAMin,uint amountBMin) private returns (uint amountA, uint amountB) {
-        require(amountADesired > 0 && amountBDesired > 0, "Router: Insufficient amount desired");
+    function addLiquidity(address tokenA, address tokenB, uint amountA, uint amountB, uint8 fee, address to) public {
+        require(amountA > 0 && amountB > 0, "Router: Insufficient amount desired");
         require(tokenA != address(0) && tokenB != address(0) && tokenA != tokenB, "Router: Invalid token address");
 
-        address pool = IFactory(factory).getPool(tokenA, tokenB);
-        amountA = amountADesired;
-        amountB = amountBDesired;
+        (address _tokenA, address _tokenB, uint _amountA, uint _amountB) = tokenA < tokenB ? (tokenA, tokenB, amountA, amountB) : (tokenB, tokenA, amountB, amountA);
+        address pool = IFactory(factory).getPool(_tokenA, _tokenB);
+
+        uint finalAmountA = _amountA;
+        uint finalAmountB = _amountB;
 
         if (pool == address(0)) {
-            IFactory(factory).createPool(tokenA, tokenB);
+            IFactory(factory).createPool(_tokenA, _tokenB, fee);
         }
         else {
             (uint reserveA, uint reserveB) = IPool(pool).getReserves();
             uint liquidity = IPool(pool).totalSupply();
 
-            uint ratioA = amountA * liquidity / reserveA;
-            uint ratioB = amountB * liquidity / reserveB;
+            uint ratioA = _amountA * liquidity / reserveA;
+            uint ratioB = _amountB * liquidity / reserveB;
             if (ratioB < ratioA) {
-                amountA = amountB * reserveA / reserveB;
+                finalAmountA = _amountB * reserveA / reserveB;
             } else {
-                amountB = amountA * reserveB / reserveA;
+                finalAmountB = _amountA * reserveB / reserveA;
             }
         }
-        require(amountA > 0 && amountB > 0, "Router: Invalid amount of token");
-        require(amountA >= amountAMin && amountB >= amountBMin, "Router: Invalid minimum amount of token");
+
+        require(finalAmountA > 0 && finalAmountB > 0, "Router: Invalid amount of token");
+
+        _safeTransferFrom(_tokenA, msg.sender, pool, finalAmountA);
+        _safeTransferFrom(_tokenB, msg.sender, pool, finalAmountB);
+        IPool(pool).mint(to);
     }
 
-    function addLiquidity(address tokenA,address tokenB,uint amountADesired,uint amountBDesired,uint amountAMin,uint amountBMin,address to,uint deadline) external override returns (uint amountA, uint amountB, uint liquidity) {
-        (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
-        address pool = IFactory(factory).getPool(tokenA, tokenB);
-        _safeTransferFrom(tokenA, msg.sender, pool, amountA);
-        _safeTransferFrom(tokenB, msg.sender, pool, amountB);
-        liquidity = IPool(pool).mint(to);
+    function removeLiquidity(address tokenA, address tokenB, address from, uint value) public {
+
     }
 }
