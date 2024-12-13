@@ -1,33 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.0;
 
-import "../interfaces/ICallee.sol";
-import "../interfaces/IFactory.sol";
-import "./XpswapERC20.sol";
-
-import "../lib/Math.sol";
-import "../lib/UQ112x112.sol";
-
-import "forge-std/console.sol";
-
-contract XpswapPool is XpswapERC20 {
-    address factory;
-    using UQ112x112 for uint224;
-
-    IERC20 public tokenA;
-    IERC20 public tokenB;
-
-    uint112 public reserveA;
-    uint112 public reserveB;
-
-    uint private lastK;
-    uint8 private txFees = 3;
-    bool private mutex = false;
-
-    uint32 blockTimestampLast;
-    uint priceACumulativeLast;
-    uint priceBCumulativeLast;
-
+library Pool {
     event Mint(address indexed to, uint amountAIn, uint amountBIn);
     event Burn(address indexed from, address indexed to, uint amountAOut, uint amountBOut);
     event Swap(
@@ -38,15 +12,67 @@ contract XpswapPool is XpswapERC20 {
         uint amountAOut,
         uint amountBOut
     );
-    event Sync(uint reserveA, uint reserveB);
 
-    constructor(address tokenA_, address tokenB_) {
-        factory = msg.sender;
-        tokenA = IERC20(tokenA_);
-        tokenB = IERC20(tokenB_);
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
+        (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
+        require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
 
-    modifier reentrancyGuard() {
+    function _addLiquidity(address tokenA,address tokenB,uint amountADesired,uint amountBDesired,uint amountAMin,uint amountBMin) private returns (uint amountA, uint amountB) {
+        require(amountADesired > 0 && amountBDesired > 0, "Router: Insufficient amount desired");
+        require(tokenA != address(0) && tokenB != address(0) && tokenA != tokenB, "Router: Invalid token address");
+
+        address pool = IFactory(factory).getPool(tokenA, tokenB);
+        amountA = amountADesired;
+        amountB = amountBDesired;
+
+        if (pool == address(0)) {
+            IFactory(factory).createPool(tokenA, tokenB);
+        }
+        else {
+            (uint reserveA, uint reserveB) = IPool(pool).getReserves();
+            uint liquidity = IPool(pool).totalSupply();
+
+            uint ratioA = amountA * liquidity / reserveA;
+            uint ratioB = amountB * liquidity / reserveB;
+            if (ratioB < ratioA) {
+                amountA = amountB * reserveA / reserveB;
+            } else {
+                amountB = amountA * reserveB / reserveA;
+            }
+        }
+        require(amountA > 0 && amountB > 0, "Router: Invalid amount of token");
+        require(amountA >= amountAMin && amountB >= amountBMin, "Router: Invalid minimum amount of token");
+    }
+
+    function addLiquidity(address tokenA,address tokenB,uint amountADesired,uint amountBDesired,uint amountAMin,uint amountBMin,address to,uint deadline) external override returns (uint amountA, uint amountB, uint liquidity) {
+        (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
+        address pool = IFactory(factory).getPool(tokenA, tokenB);
+        _safeTransferFrom(tokenA, msg.sender, pool, amountA);
+        _safeTransferFrom(tokenB, msg.sender, pool, amountB);
+        liquidity = IPool(pool).mint(to);
+    }
+
+    function createPool(address tokenA_, address tokenB_) public {
+        require(tokenA_ != tokenB_, "Factory: Duplicate tokens");
+        require(tokenA_ != address(0), "Factory: Invalid token A address");
+        require(tokenB_ != address(0), "Factory: Invalid token B address");
+
+        (address tokenA, address tokenB) = tokenA_ < tokenB_ ? (tokenA_, tokenB_) : (tokenB_, tokenA_);
+        
+        require(getPools[tokenA][tokenB] == address(0), "Factory: Duplicate aPools");
+
+        address pool = address(new XpswapPool(tokenA, tokenB));
+
+        getPools[tokenA][tokenB] = pool;
+        getPools[tokenB][tokenA] = pool;
+
+        allPools.push(pool);
+
+        emit PoolCreated(tokenA, tokenB, address(getPools[tokenA][tokenB]), allPools.length);
+    }
+
+        modifier reentrancyGuard() {
         require(mutex == false, "Pool: Reentrance forbidden");
         mutex = true;
         _;
@@ -184,5 +210,7 @@ contract XpswapPool is XpswapERC20 {
         (bool success, bytes memory data) = address(token).call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
+
+    
 
 }
