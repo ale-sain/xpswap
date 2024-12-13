@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 contract PoolManager {
     
+    address public owner;
     struct Pool {
         address token0;
         address token1;
@@ -12,10 +13,18 @@ contract PoolManager {
     }
 
     mapping(bytes32 => Pool) public pools;
-    address public owner;
 
-    event PoolCreated(address indexed token0, address indexed token1, uint24 fee, bytes32 poolId);
-    event PoolDeleted(address indexed token0, address indexed token1, uint24 fee, bytes32 poolId);
+    event Mint(bytes32 poolId, address indexed to, uint amountAIn, uint amountBIn);
+    event Burn(bytes32 poolId, address indexed from, address indexed to, uint amountAOut, uint amountBOut);
+    event PoolCreated(bytes32 poolId, address indexed token0, address indexed token1, uint24 fee);
+    event Swap(
+        address indexed from,
+        address indexed to,
+        uint amountAIn,
+        uint amountBIn, 
+        uint amountAOut,
+        uint amountBOut
+    );
 
     constructor() {}
 
@@ -36,15 +45,43 @@ contract PoolManager {
             reserve1: 0
         });
 
-        emit PoolCreated(token0, token1, fee, poolId);
+        emit PoolCreated(poolId, token0_, token1_, fee);
     }
 
-    function deletePool(bytes32 poolId) external {
+    function addLiquidity(bytes32 poolId, uint amount0, uint amount1) external {
         require(pools[poolId].token0 != address(0), "Pool does not exist");
-        
-        (address token0, address token1, uint24 fee) = (pools[poolId].token0, pools[poolId].token1, pools[poolId].fee);
-        delete pools[poolId];
-        
-        emit PoolDeleted(token0, token1, fee, poolId);
+        Pool storage pool = pools[poolId];
+
+        IERC20(pool.token0).transferFrom(msg.sender, address(this), amount0);
+        IERC20(pool.token1).transferFrom(msg.sender, address(this), amount1);
+
+        pool.reserve0 += amount0;
+        pool.reserve1 += amount1;
+        liquidity[poolId][msg.sender] += amount0 * amount1; // Liquidity is represented as the product of amounts
+
+        emit LiquidityAdded(msg.sender, poolId, amount0, amount1);
     }
+
+    function removeLiquidity(bytes32 poolId, uint liquidityAmount) external {
+        require(pools[poolId].token0 != address(0), "Pool does not exist");
+        require(liquidity[poolId][msg.sender] >= liquidityAmount, "Insufficient liquidity");
+        
+        Pool storage pool = pools[poolId];
+
+        uint totalLiquidity = pool.reserve0 * pool.reserve1;
+        require(totalLiquidity > 0, "No liquidity available");
+
+        uint amount0 = (liquidityAmount * pool.reserve0) / totalLiquidity;
+        uint amount1 = (liquidityAmount * pool.reserve1) / totalLiquidity;
+
+        pool.reserve0 -= amount0;
+        pool.reserve1 -= amount1;
+        liquidity[poolId][msg.sender] -= liquidityAmount; // Reduce user's liquidity share
+
+        IERC20(pool.token0).transfer(msg.sender, amount0);
+        IERC20(pool.token1).transfer(msg.sender, amount1);
+
+        emit LiquidityRemoved(msg.sender, poolId, amount0, amount1);
+    }
+}
 }
