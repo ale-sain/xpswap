@@ -13,7 +13,7 @@ contract MockERC20 is ERC20 {
     }
 }
 
-contract BasicTest is Test {
+contract AddLiquidityTest is Test {
     struct Pool {
         address token0;
         address token1;
@@ -75,55 +75,13 @@ contract BasicTest is Test {
         return (amount0, amount1);
     }
 
-    function testCreatePool() public {
-        vm.startPrank(user1);
-
-        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
-        (pool.token0,,pool.fee,,,) = PoolManager(poolManager).pools(id);
-
-        assertEq(id, _returnId(), "Wrong id");
-        assertNotEq(pool.token0, address(0), "Pool inexistant");
-        assertEq(pool.fee, fee, "Wrong fee");
-
-
-        vm.stopPrank();
-    }
-
-    function testCreatePoolSameToken() public {
-        vm.startPrank(user1);
-
-        vm.expectRevert("Identical tokens");
-        PoolManager(poolManager).createPool(token0, token0, fee);
-        
-        vm.stopPrank();
-    }
-    
-    function testCreatePoolInvalidTokenAddress() public {
-        vm.startPrank(user1);
-
-        vm.expectRevert("Invalid token address");
-        PoolManager(poolManager).createPool(token0, address(0), fee);
-        
-        vm.stopPrank();
-    }
-
-    function testCreatePoolAlreadyExistant() public {
-        testCreatePool();
-        vm.startPrank(user1);
-
-        vm.expectRevert("Pool already exists");
-        PoolManager(poolManager).createPool(token0, token1, fee);
-
-        vm.stopPrank();
-    }
-
     function testAddFirstLiquidity() public {
-        testCreatePool();
         vm.startPrank(user1);
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
 
         uint amount0 = 10 * 1e18;
         uint amount1 = 10000 * 1e18;
-        bytes32 id = _returnId();
 
         (,,,,,pool.liquidity) = PoolManager(poolManager).pools(id);
         uint poolLiquidityBefore = pool.liquidity;
@@ -132,11 +90,11 @@ contract BasicTest is Test {
         uint token0BeforePool = MockERC20(token0).balanceOf(poolManager);
         uint token1BeforePool = MockERC20(token1).balanceOf(poolManager);
 
-        PoolManager(poolManager).addLiquidity(id, amount0, amount1, address(this));
+        PoolManager(poolManager).addLiquidity(id, amount0, amount1, user1);
         uint liquidity = Math.sqrt(amount0 * amount1);
 
         (,,,,,pool.liquidity) = PoolManager(poolManager).pools(id);
-        uint userLiquidityPool = PoolManager(poolManager).liquidity(id, address(this));
+        uint userLiquidityPool = PoolManager(poolManager).liquidity(id, user1);
 
         assertEq(pool.liquidity, poolLiquidityBefore + liquidity, "Invalid amout of pool liquidity");
         assertEq(MockERC20(token0).balanceOf(user1), token0BeforeUser - amount0, "Invalid amout of token0 user");
@@ -150,28 +108,28 @@ contract BasicTest is Test {
 
 
     function testAddOtherLiquidity() public {
-        testCreatePool();
         vm.startPrank(user1);
-        bytes32 id = _returnId();
-        PoolManager(poolManager).addLiquidity(id, 1 * 1e18, 1000 * 1e18, address(this));
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
+        PoolManager(poolManager).addLiquidity(id, 1 * 1e18, 1000 * 1e18, user1);
 
         uint amount0 = 5 * 1e18;
         uint amount1 = 10000 * 1e18;
 
         (,,,,,pool.liquidity) = PoolManager(poolManager).pools(id);
         uint poolLiquidityBefore = pool.liquidity;
-        uint userLiquidityPoolBefore = PoolManager(poolManager).liquidity(id, address(this));
+        uint userLiquidityPoolBefore = PoolManager(poolManager).liquidity(id, user1);
         uint token0BeforeUser = MockERC20(token0).balanceOf(user1);
         uint token1BeforeUser = MockERC20(token1).balanceOf(user1);
         uint token0BeforePool = MockERC20(token0).balanceOf(poolManager);
         uint token1BeforePool = MockERC20(token1).balanceOf(poolManager);
 
-        PoolManager(poolManager).addLiquidity(id, amount0, amount1, address(this));
+        PoolManager(poolManager).addLiquidity(id, amount0, amount1, user1);
         (amount0, amount1) = _calculateLiquidity(id, amount0, amount1);
         uint liquidity = Math.sqrt(amount0 * amount1);
 
         (,,,,,pool.liquidity) = PoolManager(poolManager).pools(id);
-        uint userLiquidityPoolAfter = PoolManager(poolManager).liquidity(id, address(this));
+        uint userLiquidityPoolAfter = PoolManager(poolManager).liquidity(id, user1);
 
         assertEq(pool.liquidity, poolLiquidityBefore + liquidity, "Invalid amout of pool liquidity");
         assertEq(MockERC20(token0).balanceOf(user1), token0BeforeUser - amount0, "Invalid amout of token0 user");
@@ -182,4 +140,94 @@ contract BasicTest is Test {
 
         vm.stopPrank();
     }
+
+    function testAddLiquidityWithLowAmounts() public {
+        vm.startPrank(user1);
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
+
+        uint amount0Low = 0;
+        uint amount1Low = 1000;
+
+        vm.expectRevert("Pool: Invalid amount for token A");
+        PoolManager(poolManager).addLiquidity(id, amount0Low, 1000 * 1e18, user1);
+        
+        vm.expectRevert("Pool: Invalid amount for token B");
+        PoolManager(poolManager).addLiquidity(id, 1 * 1e18, amount1Low, user1);
+
+        vm.stopPrank();
+    }
+
+    function testAddLiquidityWithHighAmounts() public {
+        vm.startPrank(user1);
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
+    
+        uint amount0High = 2 ** 128 - 1;
+        uint amount1High = 2 ** 128 - 1;
+
+        MockERC20(token0).mint(user1, amount0High);
+        MockERC20(token1).mint(user1, amount1High);
+
+        PoolManager(poolManager).addLiquidity(id, amount0High, amount1High, user1);
+        (,,, uint reserve0, uint reserve1, uint poolLiquidity) = PoolManager(poolManager).pools(id);
+        
+        assertEq(reserve0, amount0High, "Invalid reserve0 after large liquidity");
+        assertEq(reserve1, amount1High, "Invalid reserve1 after large liquidity");
+
+        uint expectedLiquidity = Math.sqrt(amount0High * amount1High);
+        assertEq(poolLiquidity, expectedLiquidity, "Invalid liquidity after large amounts");
+
+        vm.stopPrank();
+    }
+
+    function testAddLiquidityOverflow() public {
+        vm.startPrank(user1);
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
+        
+        uint amount0Overflow = 2 ** 130;
+        uint amount1Overflow = 2 ** 130;
+
+        vm.expectRevert(); 
+        PoolManager(poolManager).addLiquidity(id, amount0Overflow, amount1Overflow, user1);
+
+        vm.stopPrank();
+    }
+
+    function testAddLiquidityNonExistentPool() public {
+        vm.startPrank(user1);
+        
+        bytes32 id = keccak256(abi.encodePacked(token0, token1, uint24(3000))); // ID d'une pool inexistante
+        
+        vm.expectRevert("Pool does not exist");
+        PoolManager(poolManager).addLiquidity(id, 10 * 1e18, 1000 * 1e18, user1);
+        
+        vm.stopPrank();
+    }
+
+    function testAddLiquidityToZeroAddress() public {
+        vm.startPrank(user1);
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
+
+        vm.expectRevert(); // On attend un revert
+        PoolManager(poolManager).addLiquidity(id, 10 * 1e18, 1000 * 1e18, address(0));
+        
+        vm.stopPrank();
+    }
+
+    function testAddLiquidityTransferFromFails() public {
+        vm.startPrank(user1);
+        
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
+
+        MockERC20(token0).approve(poolManager, 0);
+
+        vm.expectRevert("Pool: Transfer failed");
+        PoolManager(poolManager).addLiquidity(id, 10 * 1e18, 1000 * 1e18, user1);
+        
+        vm.stopPrank();
+    }
+
 }

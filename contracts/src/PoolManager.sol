@@ -57,13 +57,14 @@ contract PoolManager is ReentrancyGuard {
     }
 
     function addLiquidity(bytes32 poolId, uint amount0, uint amount1, address to) external nonReentrant {
+        // console.log("to = ", to);
         Pool memory pool = pools[poolId];
         uint24 minimumLiquidity = pool.liquidity == 0 ? 1000 : 0;
         
+        require(to != address(0), "Invalid address");
         require(pool.token0 != address(0), "Pool does not exist");
         require(amount0 > minimumLiquidity, "Pool: Invalid amount for token A");
         require(amount1 > minimumLiquidity, "Pool: Invalid amount for token B");
-
         {
             if (pool.liquidity != 0) {
                 uint ratioA = amount0 * pool.liquidity / pool.reserve0;
@@ -74,8 +75,8 @@ contract PoolManager is ReentrancyGuard {
                     amount1 = amount0 * pool.reserve1 / pool.reserve0;
                 }
             }
-            console.log("amount0: %s", amount0);
-            console.log("amount1: %s", amount1);
+            // console.log("amount0: %s", amount0);
+            // console.log("amount1: %s", amount1);
         }
 
         uint liquidityIn = Math.sqrt(amount0 * amount1);
@@ -94,11 +95,14 @@ contract PoolManager is ReentrancyGuard {
     }
 
     function removeLiquidity(bytes32 poolId, uint liquidityOut, address to) external nonReentrant {
+        // console.log("liquidityOut = ", liquidityOut);
+        // console.log(liquidity[poolId][msg.sender]);
+        // console.log("to = ", to);
         Pool memory pool = pools[poolId];
 
+        require(to != address(0), "Invalid address");
         require(pools[poolId].token0 != address(0), "Pool does not exist");
         require(liquidity[poolId][msg.sender] >= liquidityOut, "Insufficient liquidity");
-        require(liquidityOut <= pool.liquidity, "Pool: Invalid liquidity amount");
 
         uint amount0Out = (liquidityOut * pool.reserve0) / pool.liquidity;
         uint amount1Out = (liquidityOut * pool.reserve1) / pool.liquidity;
@@ -121,14 +125,16 @@ contract PoolManager is ReentrancyGuard {
 
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
         // console.log("from: %s", from);
-        // console.log("to: %s", to);
+        // console.log("transfer to: %s", to);
         // console.log("amount: %s", amount);
-
         (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, amount));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
 
     function _safeTransfer(address token, address to, uint256 amount) private {
+        // console.log("from: %s", from);
+        // console.log("to: %s", to);
+        // console.log("amount: %s", amount);
         (bool success, bytes memory data) = token.call(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
