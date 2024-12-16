@@ -38,6 +38,7 @@ contract PoolManager is ReentrancyGuard {
     function createPool(address token0, address token1, uint24 fee) external returns (bytes32 poolId) {
         require(token0 != token1, "Identical tokens");
         require(token0 != address(0) && token1 != address(0), "Invalid token address");
+        require(fee < 1000, "Invalid fee");
 
         (address token0_, address token1_) = token0 < token1 ? (token0, token1) : (token1, token0);
 
@@ -54,6 +55,11 @@ contract PoolManager is ReentrancyGuard {
         });
 
         emit PoolCreated(poolId, token0_, token1_, fee);
+    }
+
+    function getPoolId(address token0, address token1, uint24 fee) public view returns (bytes32 poolId) {
+        (address _token0, address _token1) = token0 < token1 ? (token0, token1) : (token1, token0);
+        poolId = keccak256(abi.encodePacked(_token0, _token1, fee));
     }
 
     function addLiquidity(bytes32 poolId, uint amount0, uint amount1, address to) external nonReentrant {
@@ -121,6 +127,80 @@ contract PoolManager is ReentrancyGuard {
         _safeTransfer(pool.token1, to, amount1Out);
 
         emit Burn(poolId, msg.sender, to, amount0Out, amount1Out);
+    }
+
+    function router() public {
+
+    }
+    
+    function getAmountIn(bytes32 id, uint reserveIn, uint reserveOut, uint amountOut) public view returns (uint amountIn) {
+        Pool memory _pool = pools[id];
+        
+        uint numerator = reserveIn * amountOut * 1000;
+        uint denominator = (reserveOut - amountOut) * (1000 - _pool.fee);
+        amountIn = numerator / denominator;
+    }
+
+    function getAmountOut(bytes32 id, uint reserveIn, uint reserveOut, uint amountIn) public view returns (uint amountOut) {
+        Pool memory _pool = pools[id];
+        uint amountInWithFee = amountIn * _pool.fee / 1000;
+
+        uint numerator = amountInWithFee * reserveOut;
+        uint denominator = reserveIn + amountInWithFee;
+        amountOut = numerator / denominator;
+    }
+
+    function reserveUpdate(bytes32 id, uint amount0, uint amount1) private {
+        Pool storage pool = pools[id];
+        
+        pool.reserve0 += amount0;
+        pool.reserve1 -= amount1;
+    }
+
+    function swapWithInput(Pool memory pool, uint amountIn, uint minAmountOut, bool zeroForOne) public {
+        bytes32 id = getPoolId(pool.token0, pool.token1, pool.fee);
+        Pool memory _pool = pools[id];
+        (uint reserveIn, uint reserveOut) = zeroForOne ? (_pool.reserve0, _pool.reserve1) : (_pool.reserve1, _pool.reserve0);
+
+        require(_pool.token0 != address(0), "Pool does not exist");
+        require(amountIn * _pool.fee > 0, "Pool: Input too small after fees");
+        
+        uint amountOut = getAmountOut(id, amountIn, reserveIn, reserveOut);
+
+        require(amountOut >= minAmountOut, "Pool: Insufficient output amount");
+        require(amountOut < reserveOut, "Pool: Insufficient liquidity in pool");
+
+        reserveUpdate(id, zeroForOne ? amountIn : amountOut, zeroForOne ? amountOut : amountIn);
+    }
+
+    function swapWithOutput(Pool memory pool, uint amountOut, uint maxAmoutIn, bool zeroForOne) public {
+        bytes32 id = getPoolId(pool.token0, pool.token1, pool.fee);
+        Pool memory _pool = pools[id];
+        (uint reserveIn, uint reserveOut) = zeroForOne ? (_pool.reserve0, _pool.reserve1) : (_pool.reserve1, _pool.reserve0);
+
+        require(_pool.token0 != address(0), "Pool does not exist");
+        require(amountOut < reserveOut, "Insufficient liquidity in pool");
+        
+        uint amountIn = getAmountIn(id, amountOut, reserveIn, reserveOut);
+        
+        require(amountIn <= maxAmoutIn, "Insufficient input amount");
+
+        reserveUpdate(id, zeroForOne ? amountIn : amountOut, zeroForOne ? amountOut : amountIn);
+    }
+
+    function takeAll(address token, uint amountOut, address to) public {
+        require(token != address(0), "Invalid token address");
+        require(amountOut > 0, "Invalid amount");
+        require(IERC20(token).balanceOf(address(this)) >= amountOut, "Insufficient balance");
+
+        _safeTransfer(token, to, amountOut);
+    }
+
+    function settleAll(address token, address from) public {
+        require(token != address(0), "Invalid token address");
+        require(IERC20(token).balanceOf(address(this)) > 0, "Insufficient balance");
+
+        _safeTransfer(token, to, IERC20(token).balanceOf(address(this)));
     }
 
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {

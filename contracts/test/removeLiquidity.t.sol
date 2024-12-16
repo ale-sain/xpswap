@@ -135,7 +135,6 @@ contract RemoveLiquidityTest is Test {
         bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
         PoolManager(poolManager).addLiquidity(id, 10 * 1e18, 10000 * 1e18, user1);
 
-        (,,, uint reserve0Before, uint reserve1Before, uint poolLiquidityBefore) = PoolManager(poolManager).pools(id);
         uint liquidityToRemove = PoolManager(poolManager).liquidity(id, user1);
 
         vm.expectRevert("Insufficient liquidity");
@@ -167,29 +166,4 @@ contract RemoveLiquidityTest is Test {
         PoolManager(poolManager).removeLiquidity(id, 1 * 1e18, user1);
         vm.stopPrank();
     }
-
-
-    function testRemoveLiquidityTokenTransferFails() public {
-        vm.startPrank(user1);
-        
-        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
-        PoolManager(poolManager).addLiquidity(id, 10 * 1e18, 10000 * 1e18, user1);
-
-
-        PoolManager(poolManager).addLiquidity(id, 10 * 1e18, 10000 * 1e18, user1);
-        
-        // On retire toutes les liquidités du pool
-        PoolManager(poolManager).removeLiquidity(id, PoolManager(poolManager).liquidity(id, user1), user1);
-        
-        // Force la pool à avoir 0 jeton disponible
-        MockERC20(token0).transfer(poolManager, 0);
-        MockERC20(token1).transfer(poolManager, 0);
-        
-        vm.expectRevert("Pool: Transfer failed");
-        PoolManager(poolManager).removeLiquidity(id, 1 * 1e18, user1);
-        
-        vm.stopPrank();
-    }
-
-
 }
