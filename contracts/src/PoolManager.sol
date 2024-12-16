@@ -8,6 +8,13 @@ import "forge-std/console.sol";
 
 contract PoolManager is ReentrancyGuard {
     address public owner;
+
+    struct Debt {
+        address token;
+        uint256 amount;
+        bytes32 poolId;
+    }
+
     struct Pool {
         address token0;
         address token1;
@@ -20,6 +27,7 @@ contract PoolManager is ReentrancyGuard {
     mapping(bytes32 => Pool) public pools;
     mapping(bytes32 => mapping(address => uint)) public liquidity;
 
+    Debt[] public debts;
 
     event Mint(bytes32 poolId, address indexed to, uint amount0In, uint amount1In);
     event Burn(bytes32 poolId, address indexed from, address indexed to, uint amount0Out, uint amount1Out);
@@ -196,11 +204,33 @@ contract PoolManager is ReentrancyGuard {
         _safeTransfer(token, to, amountOut);
     }
 
+    function swap(address tokenIn, address tokenOut, uint256 amountIn) public {
+        uint256 amountOut = getAmountOut(amountIn, tokenIn, tokenOut);
+
+        // 🔥 Au lieu de transférer maintenant, on enregistre la dette
+        debts.push(Debt({
+            token: tokenOut,
+            amount: amountOut,
+            pool: address(pool)
+        }));
+    }
+
+    function settleAll() public {
+        for (uint256 i = 0; i < debts.length; i++) {
+            Debt memory debt = debts[i];
+            if (debt.amount > 0) {
+                require(IERC20(debt.token).balanceOf(msg.sender) >= debt.amount, "Insufficient user balance");
+                _safeTransferFrom(debt.token, msg.sender, address(this), debt.amount);
+            }
+        }
+        delete debts;
+    }
+
     function settleAll(address token, address from) public {
         require(token != address(0), "Invalid token address");
-        require(IERC20(token).balanceOf(address(this)) > 0, "Insufficient balance");
+        require(IERC20(token).balanceOf(from) > 0, "Insufficient balance");
 
-        _safeTransfer(token, to, IERC20(token).balanceOf(address(this)));
+        _safeTransferFrom(token, from, IERC20(token).balanceOf(address(this)));
     }
 
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
