@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "forge-std/console.sol";
 
 contract PoolManager is ReentrancyGuard {
+    bool lock = true;
     address public owner;
 
     struct Pool {
@@ -59,6 +60,19 @@ contract PoolManager is ReentrancyGuard {
         emit PoolCreated(poolId, token0_, token1_, fee);
     }
 
+    modifier onlyUnlocked() {
+        require(lock == false, "Function callable only if contract unlock");
+        _;
+    }
+
+    function unlock(bytes calldata data) {
+        require(lock == true, "Contract already unlocked");
+        
+        IExchangeLogic(msg.sender).call(data);
+
+        require()
+    }
+
     function getPoolId(address token0, address token1, uint24 fee) public view returns (bytes32 poolId) {
         (address _token0, address _token1) = token0 < token1 ? (token0, token1) : (token1, token0);
         poolId = keccak256(abi.encodePacked(_token0, _token1, fee));
@@ -88,7 +102,7 @@ contract PoolManager is ReentrancyGuard {
         lpDelta[poolId][to] -= liquidity;
     }
 
-    function addLiquidity(bytes32 poolId, uint amount0, uint amount1) external nonReentrant {
+    function addLiquidity(bytes32 poolId, uint amount0, uint amount1) external onlyUnlocked {
         // console.log("to = ", to);
         Pool memory pool = pools[poolId];
         uint poolLiquidity = pool.reserve0 * pool.reserve1;
@@ -124,7 +138,7 @@ contract PoolManager is ReentrancyGuard {
         emit Mint(poolId, msg.sender, amount0, amount1);
     }
 
-    function removeLiquidity(bytes32 poolId, uint liquidityOut) external nonReentrant {
+    function removeLiquidity(bytes32 poolId, uint liquidityOut) external onlyUnlocked {
         Pool memory pool = pools[poolId];
         uint poolLiquidity = Math.sqrt(pool.reserve0 * pool.reserve1);
 
@@ -149,113 +163,65 @@ contract PoolManager is ReentrancyGuard {
 
         emit Burn(poolId, msg.sender, msg.sender, amount0Out, amount1Out);
     }
-
-    function router() public {
-
-    }
     
-    function getAmountIn(bytes32 id, uint reserveIn, uint reserveOut, uint amountOut) public view returns (uint amountIn) {
-        Pool memory _pool = pools[id];
+    // function getAmountIn(bytes32 id, uint reserveIn, uint reserveOut, uint amountOut) public view returns (uint amountIn) {
+    //     Pool memory _pool = pools[id];
         
-        uint numerator = reserveIn * amountOut * 1000;
-        uint denominator = (reserveOut - amountOut) * (1000 - _pool.fee);
-        amountIn = numerator / denominator;
-    }
+    //     uint numerator = reserveIn * amountOut * 1000;
+    //     uint denominator = (reserveOut - amountOut) * (1000 - _pool.fee);
+    //     amountIn = numerator / denominator;
+    // }
 
-    function getAmountOut(bytes32 id, uint reserveIn, uint reserveOut, uint amountIn) public view returns (uint amountOut) {
-        Pool memory _pool = pools[id];
-        uint amountInWithFee = amountIn * _pool.fee / 1000;
+    // function getAmountOut(bytes32 id, uint reserveIn, uint reserveOut, uint amountIn) public view returns (uint amountOut) {
+    //     Pool memory _pool = pools[id];
+    //     uint amountInWithFee = amountIn * _pool.fee / 1000;
 
-        uint numerator = amountInWithFee * reserveOut;
-        uint denominator = reserveIn + amountInWithFee;
-        amountOut = numerator / denominator;
-    }
+    //     uint numerator = amountInWithFee * reserveOut;
+    //     uint denominator = reserveIn + amountInWithFee;
+    //     amountOut = numerator / denominator;
+    // }
 
-    function reserveUpdate(bytes32 id, uint amount0, uint amount1) private {
-        Pool storage pool = pools[id];
+    // function reserveUpdate(bytes32 id, uint amount0, uint amount1) private {
+    //     Pool storage pool = pools[id];
         
-        pool.reserve0 += amount0;
-        pool.reserve1 -= amount1;
-    }
+    //     pool.reserve0 += amount0;
+    //     pool.reserve1 -= amount1;
+    // }
 
-    function swapWithInput(Pool memory pool, uint amountIn, uint minAmountOut, bool zeroForOne) public {
-        bytes32 id = getPoolId(pool.token0, pool.token1, pool.fee);
-        Pool memory _pool = pools[id];
-        (uint reserveIn, uint reserveOut) = zeroForOne ? (_pool.reserve0, _pool.reserve1) : (_pool.reserve1, _pool.reserve0);
+    // function swapWithInput(Pool memory pool, uint amountIn, uint minAmountOut, bool zeroForOne) public {
+    //     bytes32 id = getPoolId(pool.token0, pool.token1, pool.fee);
+    //     Pool memory _pool = pools[id];
+    //     (uint reserveIn, uint reserveOut) = zeroForOne ? (_pool.reserve0, _pool.reserve1) : (_pool.reserve1, _pool.reserve0);
 
-        require(_pool.token0 != address(0), "Pool does not exist");
-        require(amountIn * _pool.fee > 0, "Pool: Input too small after fees");
+    //     require(_pool.token0 != address(0), "Pool does not exist");
+    //     require(amountIn * _pool.fee > 0, "Pool: Input too small after fees");
         
-        uint amountOut = getAmountOut(id, amountIn, reserveIn, reserveOut);
+    //     uint amountOut = getAmountOut(id, amountIn, reserveIn, reserveOut);
 
-        require(amountOut >= minAmountOut, "Pool: Insufficient output amount");
-        require(amountOut < reserveOut, "Pool: Insufficient liquidity in pool");
+    //     require(amountOut >= minAmountOut, "Pool: Insufficient output amount");
+    //     require(amountOut < reserveOut, "Pool: Insufficient liquidity in pool");
 
-        reserveUpdate(id, zeroForOne ? amountIn : amountOut, zeroForOne ? amountOut : amountIn);
+    //     reserveUpdate(id, zeroForOne ? amountIn : amountOut, zeroForOne ? amountOut : amountIn);
 
-        if (needSend) {
-            _safeTransfer(zeroForOne ? pool.token1 : pool.token0, msg.sender, zeroForOne ? amountOut : amountIn);
-        }
-    }
+    //     if (needSend) {
+    //         _safeTransfer(zeroForOne ? pool.token1 : pool.token0, msg.sender, zeroForOne ? amountOut : amountIn);
+    //     }
+    // }
 
-    function swapWithOutput(Pool memory pool, uint amountOut, uint maxAmoutIn, bool zeroForOne) public {
-        bytes32 id = getPoolId(pool.token0, pool.token1, pool.fee);
-        Pool memory _pool = pools[id];
-        (uint reserveIn, uint reserveOut) = zeroForOne ? (_pool.reserve0, _pool.reserve1) : (_pool.reserve1, _pool.reserve0);
+    // function swapWithOutput(Pool memory pool, uint amountOut, uint maxAmoutIn, bool zeroForOne) public {
+    //     bytes32 id = getPoolId(pool.token0, pool.token1, pool.fee);
+    //     Pool memory _pool = pools[id];
+    //     (uint reserveIn, uint reserveOut) = zeroForOne ? (_pool.reserve0, _pool.reserve1) : (_pool.reserve1, _pool.reserve0);
 
-        require(_pool.token0 != address(0), "Pool does not exist");
-        require(amountOut < reserveOut, "Insufficient liquidity in pool");
+    //     require(_pool.token0 != address(0), "Pool does not exist");
+    //     require(amountOut < reserveOut, "Insufficient liquidity in pool");
         
-        uint amountIn = getAmountIn(id, amountOut, reserveIn, reserveOut);
+    //     uint amountIn = getAmountIn(id, amountOut, reserveIn, reserveOut);
         
-        require(amountIn <= maxAmoutIn, "Insufficient input amount");
+    //     require(amountIn <= maxAmoutIn, "Insufficient input amount");
 
-        reserveUpdate(id, zeroForOne ? amountIn : amountOut, zeroForOne ? amountOut : amountIn);
-    }
-
-    function takeOut(address token, uint amountOut, address to) public {
-        require(token != address(0), "Invalid token address");
-        require(amountOut > 0, "Invalid amount");
-        require(IERC20(token).balanceOf(address(this)) >= amountOut, "Insufficient balance");
-
-        _safeTransfer(token, to, amountOut);
-    }
-
-    function sendIn(address token, uint amountOut, address from) public {
-        require(token != address(0), "Invalid token address");
-        require(IERC20(token).balanceOf(from) >= amountOut, "Insufficient balance");
-
-        _safeTransferFrom(token, from, address(this), amountOut);
-    }
-
-    function swap(address tokenIn, address tokenOut, uint256 amountIn) public {
-        uint256 amountOut = getAmountOut(amountIn, tokenIn, tokenOut);
-
-        // 🔥 Au lieu de transférer maintenant, on enregistre la dette
-        debts.push(Debt({
-            token: tokenOut,
-            amount: amountOut,
-            pool: address(pool)
-        }));
-    }
-
-    function settleAll() public {
-        for (uint256 i = 0; i < debts.length; i++) {
-            Debt memory debt = debts[i];
-            if (debt.amount > 0) {
-                require(IERC20(debt.token).balanceOf(msg.sender) >= debt.amount, "Insufficient user balance");
-                _safeTransferFrom(debt.token, msg.sender, address(this), debt.amount);
-            }
-        }
-        delete debts;
-    }
-
-    function settleAll(address token, address from) public {
-        require(token != address(0), "Invalid token address");
-        require(IERC20(token).balanceOf(from) > 0, "Insufficient balance");
-
-        _safeTransferFrom(token, from, IERC20(token).balanceOf(address(this)));
-    }
+    //     reserveUpdate(id, zeroForOne ? amountIn : amountOut, zeroForOne ? amountOut : amountIn);
+    // }
 
     function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
         // console.log("from: %s", from);
