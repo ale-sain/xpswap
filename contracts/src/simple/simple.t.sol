@@ -9,5 +9,5 @@ contract DbgEntry {
     function test() private {
         uint b = a + 1;
         a = b;
-    }
+    
 }
