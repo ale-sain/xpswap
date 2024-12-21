@@ -17,10 +17,8 @@ contract createPoolTest is Test {
     struct Pool {
         address token0;
         address token1;
-        uint24 fee;
         uint reserve0;
         uint reserve1;
-        uint liquidity;
     }
 
     address user1;
@@ -38,7 +36,6 @@ contract createPoolTest is Test {
         token1 = address(new MockERC20("DAI", "DAI"));
         (token0, token1) = token0 < token1 ? (token0, token1) : (token1, token0);
 
-        fee = 3000;
         poolManager = address(new PoolManager());
 
         user1 = makeAddr("user1");
@@ -57,19 +54,17 @@ contract createPoolTest is Test {
 
     function _returnId() private view returns (bytes32) {
         (address token0_, address token1_) = token0 < token1 ? (token0, token1) : (token1, token0);
-        return keccak256(abi.encodePacked(token0_, token1_, fee));
+        return keccak256(abi.encodePacked(token0_, token1_));
     }
 
     function testCreatePool() public {
         vm.startPrank(user1);
 
-        bytes32 id = PoolManager(poolManager).createPool(token0, token1, fee);
-        (pool.token0,,pool.fee,,,) = PoolManager(poolManager).pools(id);
+        bytes32 id = PoolManager(poolManager).createPool(token0, token1);
+        (pool.token0,,,) = PoolManager(poolManager).pools(id);
 
         assertEq(id, _returnId(), "Wrong id");
         assertNotEq(pool.token0, address(0), "Pool inexistant");
-        assertEq(pool.fee, fee, "Wrong fee");
-
 
         vm.stopPrank();
     }
@@ -78,7 +73,7 @@ contract createPoolTest is Test {
         vm.startPrank(user1);
 
         vm.expectRevert("Identical tokens");
-        PoolManager(poolManager).createPool(token0, token0, fee);
+        PoolManager(poolManager).createPool(token0, token0);
         
         vm.stopPrank();
     }
@@ -87,17 +82,17 @@ contract createPoolTest is Test {
         vm.startPrank(user1);
 
         vm.expectRevert("Invalid token address");
-        PoolManager(poolManager).createPool(token0, address(0), fee);
+        PoolManager(poolManager).createPool(token0, address(0));
         
         vm.stopPrank();
     }
 
     function testCreatePoolAlreadyExistant() public {
-        PoolManager(poolManager).createPool(token0, token1, fee);
+        PoolManager(poolManager).createPool(token0, token1);
         vm.startPrank(user1);
 
         vm.expectRevert("Pool already exists");
-        PoolManager(poolManager).createPool(token0, token1, fee);
+        PoolManager(poolManager).createPool(token0, token1);
 
         vm.stopPrank();
     }
