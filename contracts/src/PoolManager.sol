@@ -160,7 +160,7 @@ contract PoolManager is ReentrancyGuard {
         uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
         uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
         uint poolLiquidity = Math.sqrt(reserve0 * reserve1);
-        console.log("Pool liquidity: %s", poolLiquidity);
+        console.log("Add Liquidity Pool liquidity: %s", poolLiquidity);
         console.log("Reserve 0: %s", reserve0);
         console.log("Reserve 1: %s", reserve1);
         uint24 minimumLiquidity = poolLiquidity == 0 ? 1000 : 0;
@@ -187,26 +187,35 @@ contract PoolManager is ReentrancyGuard {
         _updateTokenTransientBalance(pool.token1, int(amount1));
     }
 
-    // function removeLiquidity(bytes32 poolId, uint liquidity) external {
-    //     Pool memory pool = pools[poolId];
-    //     uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
-    //     uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
-    //     uint poolLiquidity = Math.sqrt(reserve0 * reserve1);
+    function removeLiquidity(bytes32 poolId, uint liquidity) external {
+        Pool memory pool = pools[poolId];
+        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
+        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
+        uint userLiquidity = uint(int(lp[poolId][msg.sender]) + _getTransientVariable(keccak256(abi.encodePacked(poolId, msg.sender))));
+        uint poolLiquidity = Math.sqrt(reserve0 * reserve1);
+        console.log("Remove Liquidity Pool liquidity: %s", poolLiquidity);
+        console.log("Reserve 0: %s", reserve0);
+        console.log("Reserve 1: %s", reserve1);
+        console.log("To remove: %s", liquidity);
+        console.log("User liquidity: %s", userLiquidity);
 
-    //     require(msg.sender != address(0), "Invalid address");
-    //     require(pools[poolId].token0 != address(0), "Pool does not exist");
-    //     require(liquidity <= pool[poolId][msg.sender], "Insufficient liquidity");
+        require(liquidity > 0, "Invalid liquidity amount"); 
+        require(pools[poolId].token0 != address(0), "Pool does not exist");
+        require(liquidity <= userLiquidity, "Insufficient liquidity");
 
-    //     uint amount0 = (liquidity * pool.reserve0) / poolLiquidity;
-    //     uint amount1 = (liquidity * pool.reserve1) / poolLiquidity;
+        uint amount0 = (liquidity * reserve0) / poolLiquidity;
+        uint amount1 = (liquidity * reserve1) / poolLiquidity;
 
-    //     require(amount0 < pool.reserve0, "Pool: Insufficient liquidity in pool");
-    //     require(amount1 < pool.reserve1, "Pool: Insufficient liquidity in pool");
+        console.log("Amount 0: %s", amount0);
+        console.log("Amount 1: %s", amount1);
 
-    //     _updatePoolTransientReserve(poolId, -int256(amount0), -int256(amount1), -int256(liquidity));
-    //     _updateTokenTransientBalance(pool.token0, -int256(amount0));
-    //     _updateTokenTransientBalance(pool.token1, -int256(amount1));
-    // }
+        require(amount0 < reserve0, "Pool: Insufficient liquidity in pool");
+        require(amount1 < reserve1, "Pool: Insufficient liquidity in pool");
+
+        _updatePoolTransientReserve(poolId, -int(amount0), -int(amount1), -int(liquidity));
+        _updateTokenTransientBalance(pool.token0, -int(amount0));
+        _updateTokenTransientBalance(pool.token1, -int(amount1));
+    }
 
     // function getAmountIn(bytes32 id, uint reserveIn, uint reserveOut, uint amountOut) public view returns (uint amountIn) {
     //     Pool memory _pool = pools[id];

@@ -114,6 +114,9 @@ contract AddLiquidityTest is Test {
         uint token1AfterPool = MockERC20(token1).balanceOf(poolManager);
 
         uint liquidity = Math.sqrt(amount0 * amount1);
+        
+        uint userLiquidityPoolAfter = PoolManager(poolManager).lp(poolId, user1);
+        assertEq(userLiquidityPoolAfter, liquidity - 1000, "Invalid user liquidity after removal");
 
         // Vérifications des soldes
         assertEq(token0AfterUser, token0BeforeUser - amount0, "Invalid amount of token0 user");
@@ -250,7 +253,7 @@ contract AddLiquidityTest is Test {
         addresses[1] = token1_;
 
         PoolManager(poolManager).updateContractState(poolIds);
-        
+
         vm.expectRevert("Pool: Transfer failed");
         PoolManager(poolManager).updateContractBalance(addresses);
         
