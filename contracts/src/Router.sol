@@ -9,6 +9,7 @@ contract V4Router {
     address public immutable poolManager;
 
     enum Action {
+        CreatePool,
         AddLiquidity,
         RemoveLiquidity,
         SwapWithInput,
@@ -32,7 +33,8 @@ contract V4Router {
     function executeAction(Action action, bytes memory data) public {
         bytes4 selector;
 
-        if (action == Action.AddLiquidity) selector = bytes4(keccak256("addLiquidity(bytes32,uint256,uint256)"));
+        if (action == Action.CreatePool) selector = bytes4(keccak256("createPool(address,address)"));
+        else if (action == Action.AddLiquidity) selector = bytes4(keccak256("addLiquidity(bytes32,uint256,uint256)"));
         else if (action == Action.RemoveLiquidity) selector = bytes4(keccak256("removeLiquidity(bytes32,uint256)"));
         else if (action == Action.SwapWithInput) selector = bytes4(keccak256("swapWithInput(bytes32,uint256,uint256,bool)"));
         else if (action == Action.SwapWithOutput) selector = bytes4(keccak256("swapWithOutput(bytes32,uint256,uint256,bool)"));

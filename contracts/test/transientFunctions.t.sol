@@ -272,6 +272,24 @@ contract TestPoolManager is Test {
         vm.stopPrank();
     }
 
+    function testSingleUpdateContractBalanceNotEnoughBalance() public {
+        vm.startPrank(user2);
+
+        MockERC20(token0).transfer(user1, 10 * 1e18);
+
+        address[] memory tokens = new address[](1);
+        tokens[0] = token0;
+
+        poolManager._updateTokenTransientBalance(token0, 10 * 1e18);
+        int activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        assertEq(activeDelta, 1);
+        
+        vm.expectRevert("Pool: Transfer failed");
+        poolManager.updateContractBalance(tokens);
+
+        vm.stopPrank();
+    }
+
     function testMultiCancellingUpdateContractBalance() public {
         vm.startPrank(user1);
 
