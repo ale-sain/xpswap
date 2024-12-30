@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "forge-std/console.sol";
-import {ICallback} from "./Router.sol";
+import {ICallback} from "./ICallback.sol";
 
 contract PoolManager is ReentrancyGuard {
     bool lock = true;
@@ -36,21 +36,28 @@ contract PoolManager is ReentrancyGuard {
 
     constructor() {}
 
-    // function unlock(uint256[] calldata actions, bytes[] calldata data) public {
-    //     require(lock == true, "Contract already in use");
+    function unlock(uint256[] calldata actions, bytes[] calldata data) public {
+        require(lock == true, "Contract already in unlocked");
         
-    //     lock = false;
-    //     ICallback(msg.sender).executeAll(actions, data);
-    //     lock = true;
+        console.log("Unlocking...");
+        lock = false;
+        ICallback(msg.sender).executeAll(actions, data);
+        lock = true;
 
-    //     require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) == 0, "Unprocessed transactions");
-    // }
+        console.log("Done");
+        require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) == 0, "Unprocessed transactions");
+    }
+
+    modifier onlyUnlocked() {
+        require(lock == false, "Contract locked");
+        _;
+    }
 
     function abs(int256 value) internal pure returns (uint256) {
         return value < 0 ? uint256(-value) : uint256(value);
     }
 
-    function createPool(address token0, address token1) external returns (bytes32 poolId) {
+    function createPool(address token0, address token1) external onlyUnlocked returns (bytes32 poolId) {
         require(token0 != token1, "Identical tokens");
         require(token0 != address(0) && token1 != address(0), "Invalid token address");
 
@@ -65,11 +72,16 @@ contract PoolManager is ReentrancyGuard {
             reserve0: 0,
             reserve1: 0
         });
+
+        // console.log("Pool created : token0_: %s, token1_ : %s", token0_, token1_);
+        // console.log("token0 < token1? ", token0 < token1);
     }
 
     function getPoolId(address token0, address token1) public pure returns (bytes32 poolId) {
         (address _token0, address _token1) = token0 < token1 ? (token0, token1) : (token1, token0);
         poolId = keccak256(abi.encodePacked(_token0, _token1));
+        // if (!pools[poolId])
+        //     return 0;
     }
 
     function _setTransientValue(bytes32 key, int delta) public returns (int beforeValue, int afterValue) {
@@ -91,11 +103,11 @@ contract PoolManager is ReentrancyGuard {
 
         if (liquidity != 0) _setTransientValue(keccak256(abi.encodePacked(poolId, msg.sender)), liquidity);
         (int before0, int after0) = _setTransientValue(keccak256(abi.encodePacked(poolId, pool.token0)), amount0);
-        console.log("AMOUNT 0 : before0: %s", before0);
-        console.log("AMOUNT 0 : after0: %s", after0);
+        // console.log("AMOUNT 0 : before0: %s", before0);
+        // console.log("AMOUNT 0 : after0: %s", after0);
         (int before1, int after1) = _setTransientValue(keccak256(abi.encodePacked(poolId, pool.token1)), amount1);
-        console.log("AMOUNT 1 : before1: %s", before1);
-        console.log("AMOUNT 1 : after1: %s", after1);
+        // console.log("AMOUNT 1 : before1: %s", before1);
+        // console.log("AMOUNT 1 : after1: %s", after1);
         
         if (before0 == 0 && before1 == 0) _setTransientValue(keccak256(abi.encodePacked("activeDelta")), 1);
         if (after0 == 0 && after1 == 0) _setTransientValue(keccak256(abi.encodePacked("activeDelta")), -1);
@@ -114,7 +126,7 @@ contract PoolManager is ReentrancyGuard {
         // console.log("Token Transient : activeDelta: %s", _getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
     }
 
-    function updateContractState(bytes32[] calldata poolsId) public {
+    function updateContractState(bytes32[] calldata poolsId) public onlyUnlocked {
         for (uint i = 0; i < poolsId.length; i++) {
             bytes32 poolId = poolsId[i];
 
@@ -136,7 +148,7 @@ contract PoolManager is ReentrancyGuard {
         }
     }
 
-    function updateContractBalance(address[] calldata tokens) public {
+    function updateContractBalance(address[] calldata tokens) public onlyUnlocked {
         for (uint i = 0; i < tokens.length; i++) {
             address token = tokens[i];
             int amount = _getTransientVariable(keccak256(abi.encodePacked(token)));
@@ -159,7 +171,7 @@ contract PoolManager is ReentrancyGuard {
         }
     }
 
-    function addLiquidity(bytes32 poolId, uint amount0, uint amount1) external {
+    function addLiquidity(bytes32 poolId, uint amount0, uint amount1) external onlyUnlocked {
         Pool memory pool = pools[poolId];
         uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
         uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
@@ -191,7 +203,7 @@ contract PoolManager is ReentrancyGuard {
         _updateTokenTransientBalance(pool.token1, int(amount1));
     }
 
-    function removeLiquidity(bytes32 poolId, uint liquidity) external {
+    function removeLiquidity(bytes32 poolId, uint liquidity) external onlyUnlocked {
         Pool memory pool = pools[poolId];
         uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
         uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
@@ -235,12 +247,12 @@ contract PoolManager is ReentrancyGuard {
         amountOut = numerator / denominator;
     }
 
-    function swapWithInput(bytes32 poolId, uint amountIn, uint minAmountOut, bool zeroForOne) public {
+    function swapWithInput(bytes32 poolId, uint amountIn, uint minAmountOut, bool zeroForOne) public onlyUnlocked {
         Pool memory pool = pools[poolId];
         uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
         uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
 
-        console.log("minAmountOut: %s", minAmountOut);
+        // console.log("minAmountOut: %s", minAmountOut);
         (uint reserveIn, uint reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
 
         require(pool.token0 != address(0), "Pool does not exist");
@@ -248,10 +260,14 @@ contract PoolManager is ReentrancyGuard {
         
         uint amountOut = getAmountOut(reserveIn, reserveOut, amountIn);
 
-        console.log("Amount In: %s", amountIn);
-        console.log("Amount Out: %s", amountOut);
-        console.log("Reserve In: %s", reserveIn);
-        console.log("Reserve Out: %s", reserveOut);
+        // console.log("Amount In: %s", amountIn);
+        // console.log("Token In: %s", zeroForOne ? pool.token0 : pool.token1);
+
+        // console.log("Amount Out: %s", amountOut);
+        // console.log("Token Out: %s", zeroForOne ? pool.token1 : pool.token0);
+
+        // console.log("Reserve In: %s", reserveIn);
+        // console.log("Reserve Out: %s", reserveOut);
         
         require(amountOut >= minAmountOut, "Pool: Insufficient output amount");
         require(amountOut < reserveOut, "Pool: Insufficient liquidity in pool");
@@ -261,7 +277,7 @@ contract PoolManager is ReentrancyGuard {
         _updateTokenTransientBalance(zeroForOne ? pool.token1 : pool.token0, -int(amountOut));
     }
 
-    function swapWithOutput(bytes32 poolId, uint amountOut, uint maxAmoutIn, bool zeroForOne) public {
+    function swapWithOutput(bytes32 poolId, uint amountOut, uint maxAmountIn, bool zeroForOne) public onlyUnlocked {
         Pool memory pool = pools[poolId];
         uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
         uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
@@ -272,8 +288,19 @@ contract PoolManager is ReentrancyGuard {
         require(amountOut < reserveOut, "Insufficient liquidity in pool");
         
         uint amountIn = getAmountIn(reserveIn, reserveOut, amountOut);
+
+        // console.log("Amount In: %s", amountIn);
+        // console.log("maxAmountIn: %s", maxAmountIn);
+        // console.log("Token In: %s", zeroForOne ? pool.token0 : pool.token1);
+
+        // console.log("Amount Out: %s", amountOut);
+        // console.log("Token Out: %s", zeroForOne ? pool.token1 : pool.token0);
+
+        // console.log("Reserve In: %s", reserveIn);
+        // console.log("Reserve Out: %s", reserveOut);
+    
         
-        require(amountIn <= maxAmoutIn, "Insufficient input amount");
+        require(amountIn <= maxAmountIn, "Insufficient input amount");
 
         _updatePoolTransientReserve(poolId, zeroForOne ? int(amountIn) : -int(amountOut), zeroForOne ? -int(amountOut) : int(amountIn), 0);
         _updateTokenTransientBalance(zeroForOne ? pool.token0 : pool.token1, int(amountIn));
