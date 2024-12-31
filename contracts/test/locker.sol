@@ -68,12 +68,14 @@ contract createPoolTest is Test, ICallback {
     }
 
     function executeAll(uint256[] calldata actions, bytes[] calldata data) public {
+        console.log("Entering executeAll");
         require(actions.length == data.length, "Mismatched actions and data length");
-
+        console.log("Executing all actions");
         vm.startPrank(user1);
 
         for (uint256 i = 0; i < actions.length; i++) {
             if (actions[i] == 1) {
+                console.log("Creating pool");
                 // Décodage des données pour la création d'une pool
                 (address tokenA, address tokenB) = abi.decode(data[i], (address, address));
                 bytes32 id = PoolManager(poolManager).createPool(tokenA, tokenB);
@@ -82,11 +84,37 @@ contract createPoolTest is Test, ICallback {
                 (pool.token0,,,) = PoolManager(poolManager).pools(id);
                 assertEq(id, _returnId(), "Wrong id");
                 assertNotEq(pool.token0, address(0), "Pool inexistant");
+            } else if (actions[i] == 2) {
+                console.log("Adding liquidity");
+                PoolManager(poolManager).unlock(actions, data);
             } else {
-                // revert("Unknown action");
+                console.log("Unsupported action");
+                // revert("Unsupported action");
             }
         }
-
+        console.log("All actions executed");
         vm.stopPrank();
+    }
+
+    function testUnlockWhenAlreadyUnlocked() public {
+        uint256[] memory actions = new uint256[](1);
+        actions[0] = 2;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encode(token0, token1);
+
+        vm.expectRevert("Contract already in unlocked");
+        PoolManager(poolManager).unlock(actions, data);
+    }
+
+    function testUnlockWithIncompleteTransactions() public {
+        // Simulate unprocessed transactions
+        uint256[] memory actions = new uint256[](1);
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encode(token0, token1);
+
+        PoolManager(poolManager)._setTransientValue(keccak256(abi.encodePacked("activeDelta")), 1);
+        
+        vm.expectRevert("Unprocessed transactions");
+        PoolManager(poolManager).unlock(actions, data);
     }
 }

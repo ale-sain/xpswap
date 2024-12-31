@@ -37,6 +37,7 @@ contract PoolManager is ReentrancyGuard {
     constructor() {}
 
     function unlock(uint256[] calldata actions, bytes[] calldata data) public {
+        console.log("Wants to unlock");
         require(lock == true, "Contract already in unlocked");
         
         console.log("Unlocking...");
@@ -44,7 +45,7 @@ contract PoolManager is ReentrancyGuard {
         ICallback(msg.sender).executeAll(actions, data);
         lock = true;
 
-        console.log("Done");
+        console.log("Done and going to check");
         require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) == 0, "Unprocessed transactions");
     }
 
