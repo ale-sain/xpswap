@@ -1,8 +1,0 @@
-{
-    "solc": "0.8.28",
-    "sourceDirs": [
-        "."
-    ],
-    "entryPoint": "DbgEntry.constructor",
-    "inputEntryPoint": "Simple.constructor"
-}
