@@ -8,7 +8,7 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - .:/app  # Monte le code source pour le hot reload
-      - /app/node_modules  # Exclut node_modules local pour éviter les conflits
+      - .:/app  
+      - /app/node_modules 
     environment:
       - NODE_ENV=development
