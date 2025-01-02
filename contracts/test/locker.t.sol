@@ -42,7 +42,7 @@ contract createPoolTest is Test, ICallback {
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
 
-        MockERC20(token0).mint(user1, 20 * 1e18);
+        MockERC20(token0).mint(user1, 2000 * 1e18);
         MockERC20(token1).mint(user1, 20000 * 1e18);
 
         vm.startPrank(user1);
@@ -86,6 +86,9 @@ contract createPoolTest is Test, ICallback {
                 assertNotEq(pool.token0, address(0), "Pool inexistant");
             } else if (actions[i] == 2) {
                 console.log("Adding liquidity");
+                PoolManager(poolManager).addLiquidity(_returnId(), 1000 * 1e18, 10000 * 1e18);
+            } else if (actions[i] == 3) {
+                console.log("Try unlock when already locked");
                 PoolManager(poolManager).unlock(actions, data);
             } else {
                 console.log("Unsupported action");
@@ -98,7 +101,7 @@ contract createPoolTest is Test, ICallback {
 
     function testUnlockWhenAlreadyUnlocked() public {
         uint256[] memory actions = new uint256[](1);
-        actions[0] = 2;
+        actions[0] = 3;
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encode(token0, token1);
 
@@ -106,7 +109,7 @@ contract createPoolTest is Test, ICallback {
         PoolManager(poolManager).unlock(actions, data);
     }
 
-    function testUnlockWithIncompleteTransactions() public {
+    function testUnlockWithIncompleteTransactionsManually() public {
         // Simulate unprocessed transactions
         uint256[] memory actions = new uint256[](1);
         bytes[] memory data = new bytes[](1);
@@ -115,6 +118,30 @@ contract createPoolTest is Test, ICallback {
         PoolManager(poolManager)._setTransientValue(keccak256(abi.encodePacked("activeDelta")), 1);
         
         vm.expectRevert("Unprocessed transactions");
+        PoolManager(poolManager).unlock(actions, data);
+    }
+
+    function testUnlockWithIncompleteTransactions() public {
+        // Simulate unprocessed transactions
+        uint256[] memory actions = new uint256[](2);
+        actions[0] = 1;
+        actions[1] = 2;
+        bytes[] memory data = new bytes[](2);
+        data[0] = abi.encode(token0, token1);
+        data[1] = abi.encode(_returnId(), 1000 * 1e18, 10000 * 1e18);
+
+        vm.expectRevert("Unprocessed transactions");
+        PoolManager(poolManager).unlock(actions, data);
+    }
+
+    function testWrongNumberOfActionsAndData() public {
+        uint256[] memory actions = new uint256[](2);
+        actions[0] = 1;
+        actions[1] = 2;
+        bytes[] memory data = new bytes[](1);
+        data[0] = abi.encode(token0, token1);
+
+        vm.expectRevert("Mismatched actions and data length");
         PoolManager(poolManager).unlock(actions, data);
     }
 }
