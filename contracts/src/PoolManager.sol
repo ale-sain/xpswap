@@ -9,7 +9,6 @@ import {ICallback} from "./ICallback.sol";
 
 contract PoolManager is ReentrancyGuard {
     bool private lock = true;
-    address public owner;
     uint24 public fee = 3;
 
     struct Pool {
@@ -21,18 +20,6 @@ contract PoolManager is ReentrancyGuard {
 
     mapping(bytes32 => Pool) public pools;
     mapping(bytes32 => mapping(address => uint)) public lp;
-
-    event Mint(bytes32 poolId, address indexed to, uint amount0In, uint amount1In);
-    event Burn(bytes32 poolId, address indexed from, address indexed to, uint amount0Out, uint amount1Out);
-    event PoolCreated(bytes32 poolId, address indexed token0, address indexed token1, uint24 fee);
-    event Swap(
-        address indexed from,
-        address indexed to,
-        uint amount0In,
-        uint amount1In, 
-        uint amount0Out,
-        uint amount1Out
-    );
 
     constructor() {}
 
