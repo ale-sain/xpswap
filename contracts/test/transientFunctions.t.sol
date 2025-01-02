@@ -59,7 +59,7 @@ contract TestPoolManager is Test {
     }
 
     function testSimpleSetTransientValue() public {
-        bytes32 key = keccak256(abi.encodePacked("testKey"));
+        bytes32 key = poolManager._getTransientKey(abi.encodePacked("testKey"));
         int delta = 10;
 
         (int before, int afterr) = poolManager._setTransientValue(key, delta);
@@ -69,7 +69,7 @@ contract TestPoolManager is Test {
     }
 
     function testMultiSetTransientValue() public {
-        bytes32 key = keccak256(abi.encodePacked("testKey"));
+        bytes32 key = poolManager._getTransientKey(abi.encodePacked("testKey"));
         int delta = 10;
         int delta2 = -20;
 
@@ -81,7 +81,7 @@ contract TestPoolManager is Test {
     }
 
     function testGetTransientVariable() public {
-        bytes32 key = keccak256(abi.encodePacked("testKey"));
+        bytes32 key = poolManager._getTransientKey(abi.encodePacked("testKey"));
         int delta = 10;
 
         poolManager._setTransientValue(key, delta);
@@ -102,9 +102,9 @@ contract TestPoolManager is Test {
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, liquidity);
 
-        int updatedAmount0 = poolManager._getTransientVariable(keccak256(abi.encodePacked(poolId, token0_)));
-        int updatedAmount1 = poolManager._getTransientVariable(keccak256(abi.encodePacked(poolId, token1_)));
-        int updatedLiquidity = poolManager._getTransientVariable(keccak256(abi.encodePacked(poolId, address(user1))));
+        int updatedAmount0 = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked(poolId, token0_)));
+        int updatedAmount1 = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked(poolId, token1_)));
+        int updatedLiquidity = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked(poolId, address(user1))));
         
         assertEq(updatedAmount0, amount0);
         assertEq(updatedAmount1, amount1);
@@ -119,7 +119,7 @@ contract TestPoolManager is Test {
 
         poolManager._updateTokenTransientBalance(token, amount);
 
-        int updatedBalance = poolManager._getTransientVariable(keccak256(abi.encodePacked(token)));
+        int updatedBalance = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked(token)));
         assertEq(updatedBalance, amount);
     }
 
@@ -133,11 +133,11 @@ contract TestPoolManager is Test {
         int amount1 = 10;
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, 0);
-        int addedDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        int addedDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(addedDelta, 1);
         
         poolManager._updateTokenTransientBalance(token0_, amount0);
-        addedDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        addedDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(addedDelta, 2);
 
         vm.stopPrank();
@@ -153,13 +153,13 @@ contract TestPoolManager is Test {
         int liquidity = 15;
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, liquidity);
-        assertEq(1, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(1, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         bytes32[] memory poolsId = new bytes32[](1);
         poolsId[0] = poolId;
 
-        poolManager.updateContractState(poolsId);
-        assertEq(0, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        poolManager.updateContractState(address(user1), poolsId);
+        assertEq(0, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         (,, uint reserve0, uint reserve1) = poolManager.pools(poolId);
         assertEq(reserve0, uint(amount0));
@@ -178,16 +178,16 @@ contract TestPoolManager is Test {
         int liquidity = 15;
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, liquidity);
-        assertEq(1, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(1, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         poolManager._updatePoolTransientReserve(poolId, -amount0, -amount1, -liquidity);
-        assertEq(0, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(0, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         bytes32[] memory poolsId = new bytes32[](1);
         poolsId[0] = poolId;
 
-        poolManager.updateContractState(poolsId);
-        assertEq(0, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        poolManager.updateContractState(address(user1), poolsId);
+        assertEq(0, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         (,, uint reserve0, uint reserve1) = poolManager.pools(poolId);
         assertEq(reserve0, 0);
@@ -207,20 +207,20 @@ contract TestPoolManager is Test {
         int liquidity = 15;
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, liquidity);
-        assertEq(1, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(1, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, liquidity);
-        assertEq(1, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(1, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         poolManager._updatePoolTransientReserve(otherPoolId, amount0, amount1, liquidity);
-        assertEq(2, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(2, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         bytes32[] memory poolsId = new bytes32[](2);
         poolsId[0] = poolId;
         poolsId[1] = otherPoolId;
 
-        poolManager.updateContractState(poolsId);
-        assertEq(0, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        poolManager.updateContractState(address(user1), poolsId);
+        assertEq(0, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         (,, uint reserve0, uint reserve1) = poolManager.pools(poolId);
         assertEq(reserve0, uint(amount0 * 2), "Invalid reserve0");
@@ -240,11 +240,11 @@ contract TestPoolManager is Test {
         tokens[0] = token0;
 
         poolManager._updateTokenTransientBalance(token0, 10);
-        int activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        int activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 1);
         
-        poolManager.updateContractBalance(tokens);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        poolManager.updateContractBalance(address(user1), tokens);
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 0);
 
         vm.expectRevert("Invalid functions call order");
@@ -260,11 +260,11 @@ contract TestPoolManager is Test {
         tokens[0] = token0;
 
         poolManager._updateTokenTransientBalance(token0, 10);
-        int activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        int activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 1);
         
-        poolManager.updateContractBalance(tokens);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        poolManager.updateContractBalance(address(user1), tokens);
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 0);
 
         assertEq(MockERC20(token0).balanceOf(address(poolManager)), 10);
@@ -281,11 +281,11 @@ contract TestPoolManager is Test {
         tokens[0] = token0;
 
         poolManager._updateTokenTransientBalance(token0, 10 * 1e18);
-        int activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        int activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 1);
         
         vm.expectRevert("Pool: Transfer failed");
-        poolManager.updateContractBalance(tokens);
+        poolManager.updateContractBalance(address(user2), tokens);
 
         vm.stopPrank();
     }
@@ -299,15 +299,15 @@ contract TestPoolManager is Test {
         uint value = MockERC20(token0).balanceOf(user1);
 
         poolManager._updateTokenTransientBalance(token0, 10);
-        int activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        int activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 1);
 
         poolManager._updateTokenTransientBalance(token0,-10);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 0);
         
-        poolManager.updateContractBalance(tokens);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        poolManager.updateContractBalance(address(user1), tokens);
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 0);
 
         assertEq(MockERC20(token0).balanceOf(address(poolManager)), 0);
@@ -327,19 +327,19 @@ contract TestPoolManager is Test {
         uint value1 = MockERC20(token1).balanceOf(user1);
 
         poolManager._updateTokenTransientBalance(token0, 30);
-        int activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        int activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 1);
 
         poolManager._updateTokenTransientBalance(token0, -10);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 1);
         
         poolManager._updateTokenTransientBalance(token1, 50);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 2);
 
-        poolManager.updateContractBalance(tokens);
-        activeDelta = poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta")));
+        poolManager.updateContractBalance(address(user1), tokens);
+        activeDelta = poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta")));
         assertEq(activeDelta, 0);
 
         assertEq(MockERC20(token0).balanceOf(address(poolManager)), 20);
@@ -362,26 +362,26 @@ contract TestPoolManager is Test {
         int liquidity = 15;
 
         poolManager._updatePoolTransientReserve(poolId, amount0, amount1, liquidity);
-        assertEq(1, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(1, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         poolManager._updateTokenTransientBalance(token0_, amount0);
-        assertEq(2, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(2, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         poolManager._updateTokenTransientBalance(token1_, amount1);
-        assertEq(3, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        assertEq(3, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         bytes32[] memory poolsId = new bytes32[](1);
         poolsId[0] = poolId;
 
-        poolManager.updateContractState(poolsId);
-        assertEq(2, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        poolManager.updateContractState(address(user1), poolsId);
+        assertEq(2, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         address[] memory tokens = new address[](2);
         tokens[0] = token0;
         tokens[1] = token1;
 
-        poolManager.updateContractBalance(tokens);
-        assertEq(0, poolManager._getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        poolManager.updateContractBalance(address(user1), tokens);
+        assertEq(0, poolManager._getTransientVariable(poolManager._getTransientKey(abi.encodePacked("activeDelta"))));
 
         (,, uint reserve0, uint reserve1) = poolManager.pools(poolId);
         assertEq(reserve0, uint(amount0), "Invalid reserve0");

@@ -8,9 +8,9 @@ import "forge-std/console.sol";
 import {ICallback} from "./ICallback.sol";
 
 contract PoolManager is ReentrancyGuard {
-    bool lock = true;
+    bool private lock = true;
     address public owner;
-    uint24 fee = 3;
+    uint24 public fee = 3;
 
     struct Pool {
         address token0;
@@ -37,16 +37,17 @@ contract PoolManager is ReentrancyGuard {
     constructor() {}
 
     function unlock(uint256[] calldata actions, bytes[] calldata data) public {
-        console.log("Wants to unlock");
+        // console.log("Wants to unlock");
         require(lock == true, "Contract already in unlocked");
         
-        console.log("Unlocking...");
+        // console.log("Unlocking...");
         lock = false;
         ICallback(msg.sender).executeAll(actions, data);
         lock = true;
 
-        console.log("Done and going to check");
-        require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) == 0, "Unprocessed transactions");
+        // console.log("Done and going to check");
+        require(_getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))) == 0, "Unprocessed transactions");
+        // console.log("Checked");
     }
 
     modifier onlyUnlocked() {
@@ -85,55 +86,60 @@ contract PoolManager is ReentrancyGuard {
         //     return 0;
     }
 
-    function _setTransientValue(bytes32 key, int delta) public returns (int beforeValue, int afterValue) {
+    function _setTransientValue(bytes32 key, int value) private returns (int beforeValue, int afterValue) {
         assembly {
             beforeValue := tload(key)
-            afterValue := add(beforeValue, delta)
+            afterValue := add(beforeValue, value)
             tstore(key, afterValue)
         }
     }
 
-    function _getTransientVariable(bytes32 key) public view returns (int256 value) {
+    function _getTransientKey(bytes memory variableId) private view returns (bytes32 key) {
+        key = keccak256(
+            abi.encodePacked(
+                variableId,
+                block.timestamp,
+                blockhash(block.number - 1)
+            )
+        );
+    }
+
+    function _getTransientVariable(bytes32 key) private view returns (int256 value) {
         assembly {
             value := tload(key)
         }
     }
 
-    function _updatePoolTransientReserve(bytes32 poolId, int amount0, int amount1, int liquidity) public {
+    function _updatePoolTransientReserve(bytes32 poolId, int amount0, int amount1, int liquidity) private {
         Pool memory pool = pools[poolId];
 
-        if (liquidity != 0) _setTransientValue(keccak256(abi.encodePacked(poolId, msg.sender)), liquidity);
-        (int before0, int after0) = _setTransientValue(keccak256(abi.encodePacked(poolId, pool.token0)), amount0);
-        // console.log("AMOUNT 0 : before0: %s", before0);
-        // console.log("AMOUNT 0 : after0: %s", after0);
-        (int before1, int after1) = _setTransientValue(keccak256(abi.encodePacked(poolId, pool.token1)), amount1);
-        // console.log("AMOUNT 1 : before1: %s", before1);
-        // console.log("AMOUNT 1 : after1: %s", after1);
+        if (liquidity != 0) _setTransientValue(_getTransientKey(abi.encodePacked(poolId, msg.sender)), liquidity);
         
-        if (before0 == 0 && before1 == 0) _setTransientValue(keccak256(abi.encodePacked("activeDelta")), 1);
-        if (after0 == 0 && after1 == 0) _setTransientValue(keccak256(abi.encodePacked("activeDelta")), -1);
+        (int before0, int after0) = _setTransientValue(_getTransientKey(abi.encodePacked(poolId, pool.token0)), amount0);
+        (int before1, int after1) = _setTransientValue(_getTransientKey(abi.encodePacked(poolId, pool.token1)), amount1);
+        
+        if (before0 == 0 && before1 == 0) _setTransientValue(_getTransientKey(abi.encodePacked("activeDelta")), 1);
+        if (after0 == 0 && after1 == 0) _setTransientValue(_getTransientKey(abi.encodePacked("activeDelta")), -1);
 
-        require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
-        // console.log("Pool Transient : activeDelta: %s", _getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        require(_getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
     }
 
-    function _updateTokenTransientBalance(address token, int amount) public {
-        (int before0, int after0) = _setTransientValue(keccak256(abi.encodePacked(token)), amount);
+    function _updateTokenTransientBalance(address token, int amount) private {
+        (int before0, int after0) = _setTransientValue(_getTransientKey(abi.encodePacked(token)), amount);
 
-        if (before0 == 0) _setTransientValue(keccak256(abi.encodePacked("activeDelta")), 1);
-        if (after0 == 0) _setTransientValue(keccak256(abi.encodePacked("activeDelta")), -1);
+        if (before0 == 0) _setTransientValue(_getTransientKey(abi.encodePacked("activeDelta")), 1);
+        if (after0 == 0) _setTransientValue(_getTransientKey(abi.encodePacked("activeDelta")), -1);
 
-        require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
-        // console.log("Token Transient : activeDelta: %s", _getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+        require(_getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
     }
 
-    function updateContractState(bytes32[] calldata poolsId) public onlyUnlocked {
+    function updateContractState(address sender, bytes32[] calldata poolsId) public onlyUnlocked {
         for (uint i = 0; i < poolsId.length; i++) {
             bytes32 poolId = poolsId[i];
 
-            int amount0 = _getTransientVariable(keccak256(abi.encodePacked(poolId, pools[poolId].token0)));
-            int amount1 = _getTransientVariable(keccak256(abi.encodePacked(poolId, pools[poolId].token1)));
-            int liquidity = _getTransientVariable(keccak256(abi.encodePacked(poolId, msg.sender)));
+            int amount0 = _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pools[poolId].token0)));
+            int amount1 = _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pools[poolId].token1)));
+            int liquidity = _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, sender)));
 
             if (amount0 == 0 && amount1 == 0 && liquidity == 0) continue;
 
@@ -141,48 +147,49 @@ contract PoolManager is ReentrancyGuard {
             pool.reserve0 = uint(int(pool.reserve0) + amount0);
             pool.reserve1 = uint(int(pool.reserve1) + amount1);
             
-            if (liquidity != 0) lp[poolId][msg.sender] = uint(int(lp[poolId][msg.sender]) + liquidity);
+            if (liquidity != 0) lp[poolId][sender] = uint(int(lp[poolId][sender]) + liquidity);
 
-            _setTransientValue(keccak256(abi.encodePacked("activeDelta")), -1);
-            require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
-            // console.log("Contract state : activeDelta: %s", _getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+            _setTransientValue(_getTransientKey(abi.encodePacked("activeDelta")), -1);
+            require(_getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
+            // console.log("Contract state : activeDelta: %s", _getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))));
         }
     }
 
-    function updateContractBalance(address[] calldata tokens) public onlyUnlocked {
+    function updateContractBalance(address sender, address[] calldata tokens) public onlyUnlocked {
         for (uint i = 0; i < tokens.length; i++) {
             address token = tokens[i];
-            int amount = _getTransientVariable(keccak256(abi.encodePacked(token)));
-
-            // console.log("AMOUNT: %s", amount);
+            int amount = _getTransientVariable(_getTransientKey(abi.encodePacked(token)));
 
             if (amount == 0) {
                 continue;
             }
 
             if (amount > 0) {
-                _safeTransferFrom(token, msg.sender, address(this), abs(amount));
+                _safeTransferFrom(token, sender, address(this), abs(amount));
+                console.log("Transfer from %s to %s, amount: %s", sender, address(this), abs(amount));
+                console.log("Contract balance : %s", IERC20(token).balanceOf(address(this)));
             } else {
-                _safeTransfer(token, msg.sender, abs(amount));
+                _safeTransfer(token, sender, abs(amount));
+                console.log("Transfer to %s from %s, amount: %s", sender, address(this), abs(amount));
             }
 
-            _setTransientValue(keccak256(abi.encodePacked("activeDelta")), -1);
-            require(_getTransientVariable(keccak256(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
-            // console.log("Contract balance : activeDelta: %s", _getTransientVariable(keccak256(abi.encodePacked("activeDelta"))));
+            _setTransientValue(_getTransientKey(abi.encodePacked("activeDelta")), -1);
+            require(_getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))) >= 0, "Invalid functions call order");
+            // console.log("Contract balance : activeDelta: %s", _getTransientVariable(_getTransientKey(abi.encodePacked("activeDelta"))));
         }
     }
 
-    function addLiquidity(bytes32 poolId, uint amount0, uint amount1) external onlyUnlocked {
+    function addLiquidity(address sender, bytes32 poolId, uint amount0, uint amount1) external onlyUnlocked {
         Pool memory pool = pools[poolId];
-        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
-        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
+        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token0))));
+        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token1))));
         uint poolLiquidity = Math.sqrt(reserve0 * reserve1);
         // console.log("Add Liquidity Pool liquidity: %s", poolLiquidity);
         // console.log("Reserve 0: %s", reserve0);
         // console.log("Reserve 1: %s", reserve1);
         uint24 minimumLiquidity = poolLiquidity == 0 ? 1000 : 0;
         
-        require(msg.sender != address(0), "Invalid address");
+        require(sender != address(0), "Invalid address");
         require(pool.token0 != address(0), "Pool does not exist");
         require(amount0 > minimumLiquidity, "Pool: Invalid amount for token A");
         require(amount1 > minimumLiquidity, "Pool: Invalid amount for token B");
@@ -204,11 +211,11 @@ contract PoolManager is ReentrancyGuard {
         _updateTokenTransientBalance(pool.token1, int(amount1));
     }
 
-    function removeLiquidity(bytes32 poolId, uint liquidity) external onlyUnlocked {
+    function removeLiquidity(address sender, bytes32 poolId, uint liquidity) external onlyUnlocked {
         Pool memory pool = pools[poolId];
-        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
-        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
-        uint userLiquidity = uint(int(lp[poolId][msg.sender]) + _getTransientVariable(keccak256(abi.encodePacked(poolId, msg.sender))));
+        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token0))));
+        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token1))));
+        uint userLiquidity = uint(int(lp[poolId][sender]) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, sender))));
         uint poolLiquidity = Math.sqrt(reserve0 * reserve1);
         // console.log("Remove Liquidity Pool liquidity: %s", poolLiquidity);
         // console.log("Reserve 0: %s", reserve0);
@@ -250,8 +257,8 @@ contract PoolManager is ReentrancyGuard {
 
     function swapWithInput(bytes32 poolId, uint amountIn, uint minAmountOut, bool zeroForOne) public onlyUnlocked {
         Pool memory pool = pools[poolId];
-        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
-        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
+        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token0))));
+        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token1))));
 
         // console.log("minAmountOut: %s", minAmountOut);
         (uint reserveIn, uint reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
@@ -280,8 +287,8 @@ contract PoolManager is ReentrancyGuard {
 
     function swapWithOutput(bytes32 poolId, uint amountOut, uint maxAmountIn, bool zeroForOne) public onlyUnlocked {
         Pool memory pool = pools[poolId];
-        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token0))));
-        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(keccak256(abi.encodePacked(poolId, pool.token1))));
+        uint reserve0 = uint(int(pool.reserve0) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token0))));
+        uint reserve1 = uint(int(pool.reserve1) + _getTransientVariable(_getTransientKey(abi.encodePacked(poolId, pool.token1))));
 
         (uint reserveIn, uint reserveOut) = zeroForOne ? (reserve0, reserve1) : (reserve1, reserve0);
 
@@ -308,7 +315,7 @@ contract PoolManager is ReentrancyGuard {
         _updateTokenTransientBalance(zeroForOne ? pool.token1 : pool.token0, -int(amountOut));
     }
 
-    function _safeTransferFrom(address token, address from, address to, uint256 amount) public {
+    function _safeTransferFrom(address token, address from, address to, uint256 amount) private {
         // console.log("from: %s", from);
         // console.log("transfer to: %s", to);
         // console.log("amount: %s", amount);
@@ -316,7 +323,7 @@ contract PoolManager is ReentrancyGuard {
         require(success && (data.length == 0 || abi.decode(data, (bool))), 'Pool: Transfer failed');
     }
 
-    function _safeTransfer(address token, address to, uint256 amount) public {
+    function _safeTransfer(address token, address to, uint256 amount) private {
         // console.log("from: %s", from);
         // console.log("to: %s", to);
         // console.log("amount: %s", amount);

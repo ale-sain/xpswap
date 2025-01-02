@@ -30,12 +30,12 @@ contract V4Router {
         bytes4 selector;
 
         if (action == Action.CreatePool) selector = bytes4(keccak256("createPool(address,address)"));
-        else if (action == Action.AddLiquidity) selector = bytes4(keccak256("addLiquidity(bytes32,uint256,uint256)"));
-        else if (action == Action.RemoveLiquidity) selector = bytes4(keccak256("removeLiquidity(bytes32,uint256)"));
+        else if (action == Action.AddLiquidity) selector = bytes4(keccak256("addLiquidity(address,bytes32,uint256,uint256)"));
+        else if (action == Action.RemoveLiquidity) selector = bytes4(keccak256("removeLiquidity(address,bytes32,uint256)"));
         else if (action == Action.SwapWithInput) selector = bytes4(keccak256("swapWithInput(bytes32,uint256,uint256,bool)"));
         else if (action == Action.SwapWithOutput) selector = bytes4(keccak256("swapWithOutput(bytes32,uint256,uint256,bool)"));
-        else if (action == Action.UpdateContractState) selector = bytes4(keccak256("updateContractState(bytes32[])"));
-        else if (action == Action.UpdateContractBalance) selector = bytes4(keccak256("updateContractBalance(address[])"));
+        else if (action == Action.UpdateContractState) selector = bytes4(keccak256("updateContractState(address,bytes32[])"));
+        else if (action == Action.UpdateContractBalance) selector = bytes4(keccak256("updateContractBalance(address,address[])"));
         else revert("Unsupported action");
 
         (bool success, ) = poolManager.call(abi.encodePacked(selector, data));

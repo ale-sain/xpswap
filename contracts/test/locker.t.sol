@@ -71,7 +71,6 @@ contract createPoolTest is Test, ICallback {
         console.log("Entering executeAll");
         require(actions.length == data.length, "Mismatched actions and data length");
         console.log("Executing all actions");
-        vm.startPrank(user1);
 
         for (uint256 i = 0; i < actions.length; i++) {
             if (actions[i] == 1) {
@@ -86,22 +85,29 @@ contract createPoolTest is Test, ICallback {
                 assertNotEq(pool.token0, address(0), "Pool inexistant");
             } else if (actions[i] == 2) {
                 console.log("Adding liquidity");
-                PoolManager(poolManager).addLiquidity(_returnId(), 1000 * 1e18, 10000 * 1e18);
+                (address sender, bytes32 id, uint256 amount0, uint256 amount1) = abi.decode(data[i], (address, bytes32, uint256, uint256));
+                PoolManager(poolManager).addLiquidity(sender, id, amount0, amount1);
             } else if (actions[i] == 3) {
-                console.log("Try unlock when already locked");
+                console.log("Updating contract balance");
+                (address sender, address[] memory tokens) = abi.decode(data[i], (address, address[]));
+                PoolManager(poolManager).updateContractBalance(sender, tokens);
+            } else if (actions[i] == 4) {
+                console.log("Updating contract state");
+                (address sender, bytes32[] memory poolIds) = abi.decode(data[i], (address, bytes32[]));
+                PoolManager(poolManager).updateContractState(sender, poolIds);
+            } else if (actions[i] == 5) {
+                console.log("Try unlock with complete transactions");
                 PoolManager(poolManager).unlock(actions, data);
             } else {
                 console.log("Unsupported action");
-                // revert("Unsupported action");
             }
         }
         console.log("All actions executed");
-        vm.stopPrank();
     }
 
     function testUnlockWhenAlreadyUnlocked() public {
         uint256[] memory actions = new uint256[](1);
-        actions[0] = 3;
+        actions[0] = 5;
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encode(token0, token1);
 
@@ -115,7 +121,7 @@ contract createPoolTest is Test, ICallback {
         bytes[] memory data = new bytes[](1);
         data[0] = abi.encode(token0, token1);
 
-        PoolManager(poolManager)._setTransientValue(keccak256(abi.encodePacked("activeDelta")), 1);
+        PoolManager(poolManager)._setTransientValue(PoolManager(poolManager)._getTransientKey(abi.encodePacked("activeDelta")), 1);
         
         vm.expectRevert("Unprocessed transactions");
         PoolManager(poolManager).unlock(actions, data);
@@ -128,10 +134,38 @@ contract createPoolTest is Test, ICallback {
         actions[1] = 2;
         bytes[] memory data = new bytes[](2);
         data[0] = abi.encode(token0, token1);
-        data[1] = abi.encode(_returnId(), 1000 * 1e18, 10000 * 1e18);
+        data[1] = abi.encode(address(user1), _returnId(), 1000 * 1e18, 10000 * 1e18);
 
         vm.expectRevert("Unprocessed transactions");
         PoolManager(poolManager).unlock(actions, data);
+    }
+
+    function testUnlockWithCompleteMultipleTransactions() public {
+        uint256[] memory actions = new uint256[](4);
+        actions[0] = 1;
+        actions[1] = 2;
+        actions[2] = 3;
+        actions[3] = 4;
+        
+        address[] memory tokens = new address[](2);
+        tokens[0] = token0;
+        tokens[1] = token1;
+        bytes32[] memory poolIds = new bytes32[](1);
+        poolIds[0] = _returnId();
+
+        bytes[] memory data = new bytes[](4);
+        data[0] = abi.encode(token0, token1);
+        data[1] = abi.encode(address(user1), _returnId(), 1000 * 1e18, 10000 * 1e18);
+        data[2] = abi.encode(address(user1), tokens);
+        data[3] = abi.encode(address(user1), poolIds);
+
+        PoolManager(poolManager).unlock(actions, data);
+
+        // write assertEq to test if adding liquidity was successful and contract balance was updated
+        assertEq(MockERC20(token0).balanceOf(poolManager), 1000 * 1e18, "Wrong balance for token0");
+        assertEq(MockERC20(token1).balanceOf(poolManager), 10000 * 1e18, "Wrong balance for token1");
+        assertEq(MockERC20(token0).balanceOf(address(user1)), 1000 * 1e18, "Wrong balance for token0");
+        assertEq(MockERC20(token1).balanceOf(address(user1)), 10000 * 1e18, "Wrong balance for token1");
     }
 
     function testWrongNumberOfActionsAndData() public {
