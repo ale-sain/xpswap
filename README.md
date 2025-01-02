@@ -1,6 +1,6 @@
 # Xpswap
 
-**Xpswap** is a simple basic DEX, built using **Solidity**, **Foundry**, and **Next.js**. The project aims to recreate the core mechanics and some features of Uniswap V4, focusing on decentralized token swapping, liquidity pools, and automated market making (AMM). 
+**Xpswap** is a simple modern DEX, built using **Solidity**, **Foundry**, and **Next.js**. The project aims to recreate the core mechanics and some features of Uniswap V4, focusing on decentralized token swapping, liquidity pools, and automated market making (AMM). 
 
 
 ## **Design Approach for AMM**
